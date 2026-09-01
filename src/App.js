@@ -118,7 +118,7 @@ export default function App() {
             disabled=${!finder.ready}
             onClick=${startSearch}
           >
-            ${!finder.ready ? 'Loading…' : finder.busy ? 'Stop' : 'Generate'}
+            ${!finder.ready ? 'Loading…' : finder.busy ? 'Stop' : 'Refresh'}
           </button>
         </div>
       </div>

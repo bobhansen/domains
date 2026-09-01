@@ -128,7 +128,7 @@ export default function Controls({
 
       <button className=${`start-btn${busy ? ' is-stop' : ''}`} type="button" disabled=${!ready} onClick=${onStart}>
         ${!ready && html`<span className="loader" aria-hidden="true" />`}
-        ${!ready ? 'Loading…' : busy ? 'Stop searching' : 'Start generating'}
+        ${!ready ? 'Loading…' : busy ? 'Stop searching' : 'Refresh'}
       </button>
     </form>
   `;
