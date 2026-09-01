@@ -7,8 +7,6 @@ export default function Controls({
   onTldChange,
   customTld,
   onCustomTldChange,
-  targetCount,
-  onTargetCountChange,
   minLen,
   onMinLenChange,
   maxLen,
@@ -56,21 +54,6 @@ export default function Controls({
           </div>
         `}
       </fieldset>
-
-      <div>
-        <label htmlFor="batch-size">Target available</label>
-        <input
-          id="batch-size"
-          type="number"
-          inputMode="numeric"
-          min=${LIMITS.target.min}
-          max=${LIMITS.target.max}
-          step=${1}
-          value=${targetCount}
-          onChange=${(e) => onTargetCountChange(e.target.value)}
-          onBlur=${(e) => onTargetCountChange(e.target.value)}
-        />
-      </div>
 
       <div className="pair">
         <div>

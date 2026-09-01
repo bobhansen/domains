@@ -52,13 +52,12 @@ export function stepLengthPreset(value, direction) {
   return LENGTH_PRESETS[i].bias;
 }
 
-export function clampSettings({ targetCount, minLen, maxLen, shortBias }) {
-  const { target, length } = LIMITS;
+export function clampSettings({ minLen, maxLen, shortBias }) {
+  const { length } = LIMITS;
   let minL = clampInt(minLen, length.min, length.max, length.minFallback);
   let maxL = clampInt(maxLen, length.min, length.max, length.maxFallback);
   if (maxL < minL) maxL = minL;
   return {
-    targetCount: clampInt(targetCount, target.min, target.max, target.fallback),
     minLen: minL,
     maxLen: maxL,
     shortBias: snapShortBias(shortBias),

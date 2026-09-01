@@ -1,6 +1,7 @@
-import { useEffect, useState, Fragment } from 'react';
+import { useEffect, useRef, useState, Fragment } from 'react';
 import { html } from './html.js';
 import { useDomainFinder } from './hooks/useDomainFinder.js';
+import { shouldUseCompactLayout } from './lib/layout.js';
 import Controls from './components/Controls.js';
 import ActivityLog from './components/ActivityLog.js';
 import About from './components/About.js';
@@ -9,6 +10,10 @@ import ResultsGrid from './components/ResultsGrid.js';
 export default function App() {
   const finder = useDomainFinder();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [compact, setCompact] = useState(() => window.innerWidth <= 860);
+  const appRef = useRef(null);
+  const railRef = useRef(null);
+  const chromeRef = useRef(0);
 
   useEffect(() => {
     document.body.style.overflow = sheetOpen ? 'hidden' : '';
@@ -26,17 +31,39 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [sheetOpen]);
 
+  useEffect(() => {
+    const app = appRef.current;
+    const rail = railRef.current;
+
+    function update() {
+      const next = shouldUseCompactLayout(rail, chromeRef.current);
+      chromeRef.current = next.chrome || chromeRef.current;
+      setCompact(next.compact);
+    }
+
+    update();
+    const ro = new ResizeObserver(update);
+    if (app) ro.observe(app);
+    if (rail) ro.observe(rail);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+
   function startSearch() {
     if (finder.busy) {
       finder.cancelSearch();
       return;
     }
     setSheetOpen(false);
-    finder.runSearch();
+    finder.runSearch({ reset: true });
   }
 
   const classes = [
     'app',
+    compact ? 'is-compact' : '',
     sheetOpen ? 'sheet-open' : '',
   ].filter(Boolean).join(' ');
 
@@ -44,7 +71,7 @@ export default function App() {
     <${Fragment}>
       <div className="atmosphere" aria-hidden="true" />
 
-      <div className=${classes}>
+      <div className=${classes} ref=${appRef}>
         <header className="mobile-bar">
           <div className="mobile-brand">
             <h1>Vanity Domain</h1>
@@ -61,7 +88,7 @@ export default function App() {
           />
         `}
 
-        <aside className="rail" id="search-settings">
+        <aside className="rail" id="search-settings" ref=${railRef}>
           <div className="sheet-handle" aria-hidden="true" />
           <div className="sheet-bar">
             <p className="sheet-title">Search settings</p>
@@ -79,8 +106,6 @@ export default function App() {
             onTldChange=${finder.setTldChoice}
             customTld=${finder.customTld}
             onCustomTldChange=${finder.setCustomTld}
-            targetCount=${finder.targetCount}
-            onTargetCountChange=${finder.setTargetCount}
             minLen=${finder.minLen}
             onMinLenChange=${finder.setMinLen}
             maxLen=${finder.maxLen}
@@ -95,12 +120,18 @@ export default function App() {
           <${ActivityLog} logs=${finder.logs} found=${finder.found} checked=${finder.checked} />
         </aside>
 
-        <main className="panel stage">
-          <header className="stage-head">
-            <h2>Available names</h2>
-          </header>
-          <${ResultsGrid} results=${finder.results} />
-        </main>
+        <div className="stage-slot">
+          <main className="panel stage">
+            <header className="stage-head">
+              <h2>Available names</h2>
+            </header>
+            <${ResultsGrid}
+              results=${finder.results}
+              capacity=${finder.capacity}
+              onCapacity=${finder.setCapacity}
+            />
+          </main>
+        </div>
 
         <div className="sheet-dock">
           <button

@@ -31,10 +31,10 @@ export function useDomainFinder() {
   const [results, setResults] = useState([]);
   const [found, setFound] = useState(0);
   const [checked, setChecked] = useState(0);
+  const [capacity, setCapacityState] = useState(0);
 
   const [tldChoice, setTldChoice] = useState('org');
   const [customTld, setCustomTld] = useState('');
-  const [targetCount, setTargetCount] = useState(LIMITS.target.fallback);
   const [minLen, setMinLen] = useState(LIMITS.length.minFallback);
   const [maxLen, setMaxLen] = useState(LIMITS.length.maxFallback);
   const [shortBias, setShortBias] = useState(LIMITS.shortBias.fallback);
@@ -48,6 +48,11 @@ export function useDomainFinder() {
   const logFnRef = useRef(() => {});
   const settingsRef = useRef({});
   const customTldRef = useRef(customTld);
+  const capacityRef = useRef(0);
+  const foundRef = useRef([]);
+  const checkedHistoryRef = useRef(new Set());
+  const nextIdRef = useRef(0);
+  const checkedCountRef = useRef(0);
 
   const log = useCallback((msg, type = 'normal') => {
     const id = ++logIdRef.current;
@@ -58,7 +63,14 @@ export function useDomainFinder() {
   }, []);
 
   logFnRef.current = log;
-  settingsRef.current = { tldChoice, customTld, targetCount, minLen, maxLen, shortBias };
+  settingsRef.current = { tldChoice, customTld, minLen, maxLen, shortBias };
+
+  const setCapacity = useCallback((n) => {
+    const cap = Math.max(0, Math.min(LIMITS.target.max, Math.round(Number(n) || 0)));
+    if (cap < 1 || cap === capacityRef.current) return;
+    capacityRef.current = cap;
+    setCapacityState(cap);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,13 +108,14 @@ export function useDomainFinder() {
     abortRef.current = null;
   }, [abortCurrent]);
 
-  const runSearch = useCallback(async () => {
+  const runSearch = useCallback(async (opts = {}) => {
+    const reset = opts.reset !== false;
     if (!generatorRef.current) return;
+    if (capacityRef.current < 1) return;
 
     const {
       tldChoice: choice,
       customTld: custom,
-      targetCount: target,
       minLen: min,
       maxLen: max,
       shortBias: bias,
@@ -122,50 +135,69 @@ export function useDomainFinder() {
       return;
     }
 
-    preemptRun();
+    if (!reset) {
+      if (runningRef.current) return;
+      if (foundRef.current.length >= capacityRef.current) return;
+    } else {
+      preemptRun();
+      foundRef.current = [];
+      checkedHistoryRef.current = new Set();
+      nextIdRef.current = 0;
+      checkedCountRef.current = 0;
+    }
 
     const {
-      targetCount: targetN,
       minLen: minL,
       maxLen: maxL,
       shortBias: biasN,
-    } = clampSettings({ targetCount: target, minLen: min, maxLen: max, shortBias: bias });
+    } = clampSettings({ minLen: min, maxLen: max, shortBias: bias });
     const generator = generatorRef.current;
     const useRdap = tldHasRdap(tld);
+    const checkedHistory = checkedHistoryRef.current;
 
     const abort = new AbortController();
     const runId = ++runIdRef.current;
     abortRef.current = abort;
     runningRef.current = true;
     setBusy(true);
-    setFound(0);
-    setChecked(0);
+    if (reset) {
+      setFound(0);
+      setChecked(0);
+    }
     setStatus(`Searching .${tld} · ${minL}–${maxL} letters`);
 
     const priorRate = expectedHitRate(generator, tld, minL, maxL, biasN);
-    const allAvailable = [];
-    const checkedHistory = new Set();
-    let totalChecked = 0;
+    let totalChecked = checkedCountRef.current;
     let finished = false;
     const fadeMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 320;
+    const target = () => Math.max(1, capacityRef.current);
+    const hitTarget = () => foundRef.current.length >= target();
 
-    log(`Starting search for ${targetN} .${tld} domains...`);
-    log(`Expected hit rate ${(priorRate * 100).toFixed(1)}% from length mix ${minL}–${maxL}.`);
-    if (useRdap) {
-      log('Using registry RDAP to confirm names that DNS says are undelegated.');
+    if (reset) {
+      log(`Filling the panel with .${tld} names...`);
+      log(`Expected hit rate ${(priorRate * 100).toFixed(1)}% from length mix ${minL}–${maxL}.`);
+      if (useRdap) {
+        log('Using registry RDAP to confirm names that DNS says are undelegated.');
+      } else {
+        log(`No RDAP for .${tld}; treating authoritative DNS NXDOMAIN as available.`);
+      }
     } else {
-      log(`No RDAP for .${tld}; treating authoritative DNS NXDOMAIN as available.`);
+      log(`Panel grew — finding more .${tld} names...`);
     }
 
     const stillThisRun = () => runIdRef.current === runId;
 
     const emitStats = () => {
       if (!stillThisRun()) return;
-      setFound(allAvailable.length);
+      checkedCountRef.current = totalChecked;
+      setFound(foundRef.current.length);
       setChecked(totalChecked);
     };
 
-    const hitTarget = () => allAvailable.length >= targetN;
+    const hidePlaceholder = () => {
+      if (!stillThisRun()) return;
+      setResults((prev) => prev.filter((r) => r.status !== 'placeholder'));
+    };
 
     const finishIfFull = () => {
       if (!hitTarget() || finished) return;
@@ -178,9 +210,8 @@ export function useDomainFinder() {
       hidePlaceholder();
     };
 
-    let nextSlotId = 0;
     const makePlaceholder = (phase = 'in') => ({
-      id: nextSlotId,
+      id: nextIdRef.current,
       tld,
       word: '',
       domain: '',
@@ -191,12 +222,16 @@ export function useDomainFinder() {
     const dropPlaceholder = (rows) => rows.filter((r) => r.status !== 'placeholder');
     const namedCount = (rows) => dropPlaceholder(rows).length;
 
-    const hidePlaceholder = () => {
-      if (!stillThisRun()) return;
-      setResults((prev) => dropPlaceholder(prev));
-    };
-
-    setResults([makePlaceholder()]);
+    if (reset) {
+      setResults([makePlaceholder()]);
+    } else {
+      setResults((prev) => {
+        const available = prev.filter((r) => r.status === 'available');
+        if (available.length >= target()) return available;
+        if (prev.some((r) => r.status === 'placeholder')) return prev;
+        return [...prev, makePlaceholder()];
+      });
+    }
 
     const setSlot = (id, patch) => {
       if (!stillThisRun()) return;
@@ -218,15 +253,15 @@ export function useDomainFinder() {
           const copy = prev.slice();
           if (ph !== -1) copy[ph] = row;
           else copy.push(row);
-          if (fillingPlaceholder || ph !== -1) nextSlotId = Math.max(nextSlotId, Number(id) + 1);
-          if (!hitTarget() && namedCount(copy) < targetN) copy.push(makePlaceholder());
+          if (fillingPlaceholder || ph !== -1) nextIdRef.current = Math.max(nextIdRef.current, Number(id) + 1);
+          if (!hitTarget() && namedCount(copy) < target()) copy.push(makePlaceholder());
           return copy;
         }
         const copy = prev.slice();
         copy[i] = row;
         if (fillingPlaceholder) {
-          nextSlotId = Math.max(nextSlotId, Number(id) + 1);
-          if (!hitTarget() && namedCount(copy) < targetN) copy.push(makePlaceholder());
+          nextIdRef.current = Math.max(nextIdRef.current, Number(id) + 1);
+          if (!hitTarget() && namedCount(copy) < target()) copy.push(makePlaceholder());
         }
         return copy;
       });
@@ -324,8 +359,17 @@ export function useDomainFinder() {
     };
 
     const confirmSlot = (id, word) => {
-      if (hitTarget()) return false;
-      allAvailable.push(`${word}.${tld}`);
+      const item = {
+        id,
+        tld,
+        word,
+        domain: `${word}.${tld}`,
+        status: 'available',
+        phase: 'shown',
+      };
+      if (!foundRef.current.some((row) => row.id === id || row.word === word)) {
+        foundRef.current = [...foundRef.current, item];
+      }
       setSlot(id, { word, status: 'available', phase: 'shown' });
       emitStats();
       finishIfFull();
@@ -353,11 +397,12 @@ export function useDomainFinder() {
           available = false;
         }
         rdapPromise = null;
-        if (abort.signal.aborted || hitTarget()) return;
+        if (abort.signal.aborted) return;
         if (available) {
           confirmSlot(id, word);
           return;
         }
+        if (hitTarget()) return;
 
         setSlot(id, { word, status: 'taken', phase: 'shown' });
         const failedWord = word;
@@ -374,36 +419,39 @@ export function useDomainFinder() {
     try {
       log(
         useRdap
-          ? `Filling ${targetN} names: DNS×${DNS_CONCURRENCY} pipelined into RDAP×${RDAP_CONCURRENCY}...`
-          : `Filling ${targetN} names against Cloudflare DoH...`,
+          ? `Checking names: DNS×${DNS_CONCURRENCY} pipelined into RDAP×${RDAP_CONCURRENCY}...`
+          : `Checking names against Cloudflare DoH...`,
       );
       const pumping = pumpDnsHits();
       const workers = [];
-      for (let id = 0; id < targetN; id++) {
-        if (abort.signal.aborted || hitTarget()) break;
+      let launchId = nextIdRef.current;
+      while (!abort.signal.aborted && !hitTarget()) {
         const word = await takeHit('append');
         if (!word) break;
-        workers.push(runSlot(id, word));
+        workers.push(runSlot(launchId, word));
+        launchId += 1;
+        nextIdRef.current = Math.max(nextIdRef.current, launchId);
       }
       await Promise.all(workers);
       await pumping.catch(() => {});
       if (!stillThisRun()) return;
+      setResults((prev) => prev.filter((r) => r.status === 'available'));
       if (finished || hitTarget()) {
-        setResults((prev) => prev.filter((r) => r.status === 'available').slice(0, targetN));
-        log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
-        setStatus(`Done · ${allAvailable.length} of ${targetN} · ${totalChecked} checked`);
+        const n = foundRef.current.length;
+        log(`Panel filled. Checked ${totalChecked} domains. Found ${n}.`, 'success');
+        setStatus(`Panel full · ${n} ready · ${totalChecked} checked`);
       } else if (abort.signal.aborted) {
         log('Search cancelled.');
-        setStatus('Cancelled — change settings and start again.');
+        setStatus('Search stopped.');
       } else {
         log('Could not generate enough unique candidates matching constraints.', 'error');
         setStatus('Search stopped.');
       }
     } catch (e) {
       if (!stillThisRun()) return;
+      setResults((prev) => prev.filter((r) => r.status === 'available'));
       if (finished || hitTarget()) {
-        setResults((prev) => prev.filter((r) => r.status === 'available').slice(0, targetN));
-        log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
+        log(`Panel filled. Checked ${totalChecked} domains. Found ${foundRef.current.length}.`, 'success');
       } else if (isAbortError(e) || abort.signal.aborted) {
         log('Search cancelled.');
         setStatus('Search stopped.');
@@ -425,6 +473,8 @@ export function useDomainFinder() {
     abortCurrent();
   }, [abortCurrent]);
 
+  const layoutReady = capacity >= 1;
+
   useEffect(() => {
     if (!ready) return undefined;
 
@@ -438,20 +488,42 @@ export function useDomainFinder() {
       return undefined;
     }
 
+    if (!layoutReady) return undefined;
+
     if (tldChoice === 'custom' && customTldChanged) {
       preemptRun();
       setBusy(false);
-      const timer = setTimeout(() => runSearch(), CUSTOM_TLD_DEBOUNCE_MS);
+      const timer = setTimeout(() => runSearch({ reset: true }), CUSTOM_TLD_DEBOUNCE_MS);
       return () => clearTimeout(timer);
     }
 
-    runSearch();
+    runSearch({ reset: true });
     return undefined;
-  }, [ready, tldChoice, customTld, targetCount, minLen, maxLen, shortBias, runSearch, preemptRun]);
+  }, [ready, layoutReady, tldChoice, customTld, minLen, maxLen, shortBias, runSearch, preemptRun]);
 
-  function commitTargetCount(raw) {
-    setTargetCount(clampInt(raw, LIMITS.target.min, LIMITS.target.max, LIMITS.target.fallback));
-  }
+  useEffect(() => {
+    if (!ready || !layoutReady) return undefined;
+
+    setResults((prev) => {
+      const have = new Set(prev.map((row) => row.id));
+      const missing = foundRef.current.filter((row) => !have.has(row.id));
+      if (!missing.length) return prev;
+      const available = prev.filter((row) => row.status === 'available');
+      const inflight = prev.filter((row) => row.status !== 'available');
+      return available.concat(missing, inflight);
+    });
+
+    if (foundRef.current.length >= capacity) {
+      if (runningRef.current) {
+        abortRef.current?.abort();
+        abortInFlightRequests();
+      }
+      return undefined;
+    }
+    if (runningRef.current) return undefined;
+    runSearch({ reset: false });
+    return undefined;
+  }, [capacity, ready, layoutReady, runSearch]);
 
   function commitMinLen(raw) {
     const minL = clampInt(raw, LIMITS.length.min, LIMITS.length.max, LIMITS.length.minFallback);
@@ -477,12 +549,12 @@ export function useDomainFinder() {
     results,
     found,
     checked,
+    capacity,
+    setCapacity,
     tldChoice,
     setTldChoice,
     customTld,
     setCustomTld,
-    targetCount,
-    setTargetCount: commitTargetCount,
     minLen,
     setMinLen: commitMinLen,
     maxLen,
