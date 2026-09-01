@@ -38,6 +38,18 @@ export class MarkovGenerator {
     }
 
     log(`Training generator on ${words.length} words...`);
+    this.buildModel(words);
+    await setCache(cacheKey, {
+      transitions: this.transitions,
+      starts: this.starts,
+      knownWords: Array.from(this.knownWords),
+    });
+    log('Training complete and cached.', 'success');
+  }
+
+  buildModel(words) {
+    this.transitions = {};
+    this.starts = [];
     this.knownWords = new Set(words);
 
     for (const word of words) {
@@ -53,45 +65,18 @@ export class MarkovGenerator {
       if (!this.transitions[endState]) this.transitions[endState] = [];
       this.transitions[endState].push(null);
     }
-
-    await setCache(cacheKey, {
-      transitions: this.transitions,
-      starts: this.starts,
-      knownWords: Array.from(this.knownWords),
-    });
-    log('Training complete and cached.', 'success');
   }
 
   generate(minLen, maxLen, shortBias) {
-    for (let attempt = 0; attempt < 100; attempt++) {
+    const bias = Number(shortBias);
+    const biasWeight = Number.isFinite(bias) && bias > 0 ? bias : 1;
+
+    for (let attempt = 0; attempt < 400; attempt++) {
+      if (!this.starts.length) return null;
       let word = this.starts[Math.floor(Math.random() * this.starts.length)];
 
-      while (word.length < 50) {
-        const state = word.slice(-this.nGram);
-        const choices = this.transitions[state];
-        if (!choices || choices.length === 0) break;
-
-        let nextChar;
-        if (shortBias !== 1.0 && choices.includes(null)) {
-          const counts = new Map();
-          for (const c of choices) counts.set(c, (counts.get(c) || 0) + 1);
-
-          const population = Array.from(counts.keys());
-          const weights = population.map((c) => (c === null ? counts.get(c) * shortBias : counts.get(c)));
-          const totalWeight = weights.reduce((a, b) => a + b, 0);
-
-          let r = Math.random() * totalWeight;
-          for (let i = 0; i < population.length; i++) {
-            r -= weights[i];
-            if (r <= 0) {
-              nextChar = population[i];
-              break;
-            }
-          }
-        } else {
-          nextChar = choices[Math.floor(Math.random() * choices.length)];
-        }
-
+      while (word.length < maxLen) {
+        const nextChar = this.pickNext(word, minLen, biasWeight);
         if (nextChar === null) break;
         word += nextChar;
       }
@@ -102,4 +87,49 @@ export class MarkovGenerator {
     }
     return null;
   }
+
+  pickNext(word, minLen, biasWeight) {
+    const state = word.slice(-this.nGram);
+    const choices = this.transitions[state];
+    if (!choices || choices.length === 0) return null;
+
+    const counts = new Map();
+    for (const c of choices) counts.set(c, (counts.get(c) || 0) + 1);
+    const nEos = counts.get(null) || 0;
+    counts.delete(null);
+
+    const letters = Array.from(counts.keys());
+    const letterWeights = letters.map((c) => counts.get(c));
+
+    if (word.length < minLen) {
+      if (!letters.length) return null;
+      return pickWeighted(letters, letterWeights);
+    }
+
+    // Stop is always a legal transition once we are in range. Bias multiplies
+    // trained end-mass, and injects a unit of end-mass when this trigram never
+    // ended a training word (otherwise high bias cannot stop until "ing"/"ion").
+    let eosWeight = nEos * biasWeight;
+    if (nEos === 0 && biasWeight > 1) eosWeight = biasWeight;
+    if (this.knownWords.has(word)) eosWeight = 0;
+
+    const population = letters.slice();
+    const weights = letterWeights.slice();
+    if (eosWeight > 0) {
+      population.push(null);
+      weights.push(eosWeight);
+    }
+    if (!population.length) return null;
+    return pickWeighted(population, weights);
+  }
+}
+
+function pickWeighted(population, weights) {
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < population.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return population[i];
+  }
+  return population[population.length - 1];
 }
