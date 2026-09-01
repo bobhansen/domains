@@ -4,7 +4,6 @@ import { useDomainFinder } from './hooks/useDomainFinder.js';
 import Controls from './components/Controls.js';
 import ActivityLog from './components/ActivityLog.js';
 import ResultsGrid from './components/ResultsGrid.js';
-import Stats from './components/Stats.js';
 
 export default function App() {
   const finder = useDomainFinder();
@@ -37,7 +36,6 @@ export default function App() {
 
   const classes = [
     'app',
-    finder.busy ? 'is-busy' : '',
     sheetOpen ? 'sheet-open' : '',
   ].filter(Boolean).join(' ');
 
@@ -48,10 +46,8 @@ export default function App() {
       <div className=${classes}>
         <header className="mobile-bar">
           <div className="mobile-brand">
-            <p className="eyebrow">Name foundry</p>
-            <h1>Find My Domain</h1>
+            <h1>Domain Spring</h1>
           </div>
-          <${Stats} found=${finder.found} checked=${finder.checked} />
         </header>
 
         ${sheetOpen && html`
@@ -72,9 +68,8 @@ export default function App() {
             </button>
           </div>
           <header className="brand">
-            <p className="eyebrow">Name foundry</p>
-            <h1>Find My Domain</h1>
-            <p className="lede">Find available domain names that are easy to say, remember, and type.</p>
+            <h1>Domain Spring</h1>
+            <p className="lede">Bubbling up open domain names that are easy to say, remember, and type.</p>
           </header>
 
           <${Controls}
@@ -95,18 +90,14 @@ export default function App() {
             onStart=${startSearch}
           />
 
-          <${ActivityLog} logs=${finder.logs} />
+          <${ActivityLog} logs=${finder.logs} found=${finder.found} checked=${finder.checked} />
         </aside>
 
         <main className="panel stage">
           <header className="stage-head">
-            <div>
-              <h2>Available names</h2>
-              <p className=${`stage-sub${finder.busy ? ' is-live' : ''}`}>${finder.status}</p>
-            </div>
-            <${Stats} found=${finder.found} checked=${finder.checked} />
+            <h2>Available names</h2>
           </header>
-          <${ResultsGrid} results=${finder.results} busy=${finder.busy} ready=${finder.ready} />
+          <${ResultsGrid} results=${finder.results} />
         </main>
 
         <button
