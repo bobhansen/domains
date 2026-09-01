@@ -100,15 +100,25 @@ export default function App() {
           <${ResultsGrid} results=${finder.results} />
         </main>
 
-        <button
-          type="button"
-          className="sheet-toggle"
-          aria-expanded=${sheetOpen}
-          aria-controls="search-settings"
-          onClick=${() => setSheetOpen((open) => !open)}
-        >
-          ${sheetOpen ? 'Close' : 'Tune search'}
-        </button>
+        <div className="sheet-dock">
+          <button
+            type="button"
+            className="sheet-toggle"
+            aria-expanded=${sheetOpen}
+            aria-controls="search-settings"
+            onClick=${() => setSheetOpen((open) => !open)}
+          >
+            ${sheetOpen ? 'Close' : 'Tune search'}
+          </button>
+          <button
+            type="button"
+            className=${`dock-start start-btn${finder.busy ? ' is-stop' : ''}`}
+            disabled=${!finder.ready}
+            onClick=${startSearch}
+          >
+            ${!finder.ready ? 'Loading…' : finder.busy ? 'Stop' : 'Generate'}
+          </button>
+        </div>
       </div>
     </${Fragment}>
   `;
