@@ -33,13 +33,13 @@ export default function Controls({
               className=${`tld-chip${tldChoice === tld ? ' is-active' : ''}`}
               onClick=${() => onTldChange(tld)}
             >
-              ${tld === 'custom' ? 'Custom' : `.${tld}`}
+              ${tld === 'custom' ? 'Other' : `.${tld}`}
             </button>
           `)}
         </div>
         ${tldChoice === 'custom' && html`
           <div className="custom-tld">
-            <label htmlFor="tld-custom">Custom TLD</label>
+            <label htmlFor="tld-custom">Other TLD</label>
             <input
               id="tld-custom"
               type="text"

@@ -102,7 +102,7 @@ export function useDomainFinder() {
 
     let tld = (choice === 'custom' ? custom : choice).trim().toLowerCase().replace(/^\./, '');
     if (!tld) {
-      log('Please enter a custom TLD.', 'error');
+      log('Please enter a TLD.', 'error');
       return;
     }
     if (validTldsRef.current.size > 0 && !validTldsRef.current.has(tld)) {
