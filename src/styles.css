@@ -84,6 +84,9 @@ body {
   position: sticky;
   top: 1.25rem;
   max-height: calc(100dvh - 2.5rem);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .brand h1,
@@ -525,16 +528,16 @@ button:focus-visible {
   .results-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
 
-/* Tablet: keep the two-column feel, tighten the rail */
-@media (max-width: 1100px) and (min-width: 861px) {
+/* Tablet: keep the two-column feel, tighten the rail — only when there is enough height */
+@media (max-width: 1100px) and (min-width: 861px) and (min-height: 741px) {
   .app {
     grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
     gap: 1.15rem;
   }
 }
 
-/* Phone / small tablet: results first, settings as a bottom sheet */
-@media (max-width: 860px) {
+/* Narrow, or short-and-wide: results first, settings as a bottom sheet */
+@media (max-width: 860px), (max-height: 740px) {
   .app {
     display: flex;
     flex-direction: column;
