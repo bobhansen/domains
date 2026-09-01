@@ -397,7 +397,19 @@ button:focus-visible {
   transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease, opacity 0.2s ease;
 }
 
-.domain-card.is-taken { opacity: 0.62; }
+.domain-card.is-taken {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: color-mix(in srgb, var(--muted) 22%, var(--panel));
+}
+
+.domain-card.is-taken .stem,
+.domain-card.is-taken .suffix,
+.domain-card.is-taken .hint,
+.domain-card.is-taken .verdict-no {
+  color: color-mix(in srgb, var(--muted) 22%, var(--panel));
+}
 
 .domain-card .stem {
   font-family: var(--serif);
@@ -413,8 +425,6 @@ button:focus-visible {
   font-size: 0.78rem;
   color: var(--sage);
 }
-
-.domain-card.is-taken .suffix { color: var(--danger); }
 
 .domain-card .hint {
   margin-top: 0.35rem;
@@ -454,7 +464,7 @@ button:focus-visible {
 }
 
 .verdict-ok { color: var(--sage); }
-.verdict-no { color: var(--danger); }
+.verdict-no { color: var(--muted); }
 
 .loader {
   display: inline-block;
@@ -479,7 +489,7 @@ button:focus-visible {
   .domain-card:hover { transform: translateY(-2px); }
   .domain-card.is-pending:hover { border-color: var(--copper); }
   .domain-card.is-available:hover { border-color: var(--sage); background: var(--sage-dim); }
-  .domain-card.is-taken:hover { border-color: var(--danger); }
+  .domain-card.is-taken:hover { border-color: transparent; transform: none; }
   .domain-card:hover .hint,
   .domain-card:focus-visible .hint { opacity: 1; }
 }
