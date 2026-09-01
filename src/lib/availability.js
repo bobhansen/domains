@@ -1,5 +1,5 @@
 import { getCache, setCache } from './cache.js';
-import { asyncPool, sleep } from './pool.js';
+import { abortError, asyncPool, isAbortError, sleep, throwIfAborted } from './pool.js';
 
 export const DNS_RCODE_NXDOMAIN = 3;
 export const DNS_TYPE_SOA = 6;
@@ -92,10 +92,24 @@ function createServiceGate(initialConcurrency) {
       if (cap > 1) cap = Math.max(1, Math.ceil(cap / 2));
       pump();
     },
+    clear(err) {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      while (q.length) {
+        q.shift().reject(err);
+      }
+    },
   };
 }
 
 const hostGates = new Map();
+
+export function abortInFlightRequests() {
+  const err = abortError();
+  for (const gate of hostGates.values()) gate.clear(err);
+}
 
 function gateFor(url, concurrency) {
   const host = new URL(url).hostname;
@@ -103,18 +117,21 @@ function gateFor(url, concurrency) {
   return hostGates.get(host);
 }
 
-async function fetchHonoringRateLimit(url, options, concurrency, log) {
+async function fetchHonoringRateLimit(url, options, concurrency, log, signal) {
+  throwIfAborted(signal);
   const gate = gateFor(url, concurrency);
   const host = new URL(url).hostname;
   let res;
   for (let attempt = 0; attempt < 8; attempt++) {
+    throwIfAborted(signal);
     try {
-      res = await gate.schedule(() => fetch(url, options));
-    } catch {
+      res = await gate.schedule(() => fetch(url, { ...options, signal }));
+    } catch (e) {
+      if (isAbortError(e) || signal?.aborted) throw abortError();
       const wait = Math.min(12_000, 800 * 2 ** attempt);
       log(`Request to ${host} blocked (often HTTP 429 without CORS headers); waiting ${(wait / 1000).toFixed(1)}s.`);
       gate.pause(wait);
-      await sleep(wait);
+      await sleep(wait, signal);
       continue;
     }
     if (res.status !== 429 && res.status !== 503) return res;
@@ -125,7 +142,7 @@ async function fetchHonoringRateLimit(url, options, concurrency, log) {
         (hinted != null ? ' (Retry-After).' : ' (backoff).'),
     );
     gate.pause(wait);
-    await sleep(wait);
+    await sleep(wait, signal);
   }
   throw new Error(`rate limited: HTTP ${res && res.status} for ${url}`);
 }
@@ -190,12 +207,13 @@ function dnsIsDelegated(data) {
   return answer.some((rr) => rr.type === DNS_TYPE_NS || rr.type === 5);
 }
 
-async function dnsLooksUndelegated(domain, log) {
+async function dnsLooksUndelegated(domain, log, signal) {
   const res = await fetchHonoringRateLimit(
     `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`,
     { headers: { Accept: 'application/dns-json' } },
     DNS_CONCURRENCY,
     log,
+    signal,
   );
   if (!res.ok) return false;
   const data = await res.json();
@@ -203,41 +221,51 @@ async function dnsLooksUndelegated(domain, log) {
   return isAuthoritativeNegative(data);
 }
 
-async function rdapIsUnregistered(domain, tld, log) {
+async function rdapIsUnregistered(domain, tld, log, signal) {
   const res = await fetchHonoringRateLimit(
     rdapLookupUrl(domain, tld),
     { headers: { Accept: 'application/rdap+json' } },
     RDAP_CONCURRENCY,
     log,
+    signal,
   );
   if (res.status === 404) return true;
   if (res.status === 200) return false;
   throw new Error(`RDAP HTTP ${res.status}`);
 }
 
-export async function scanNames(words, tld, { onDnsHit, onRdap, log }) {
+export async function scanNames(words, tld, { onDnsHit, onRdap, log, signal }) {
   const useRdap = tldHasRdap(tld);
   const rdapTasks = [];
 
-  await asyncPool(DNS_CONCURRENCY, words, async (word) => {
-    const fqdn = `${word}.${tld}`;
-    let undelegated = false;
-    try {
-      undelegated = await dnsLooksUndelegated(fqdn, log);
-    } catch {
-      return;
-    }
-    if (!undelegated) return;
-    onDnsHit(word);
-    if (!useRdap) return;
-    rdapTasks.push((async () => {
+  try {
+    await asyncPool(DNS_CONCURRENCY, words, async (word) => {
+      throwIfAborted(signal);
+      const fqdn = `${word}.${tld}`;
+      let undelegated = false;
       try {
-        onRdap(word, await rdapIsUnregistered(fqdn, tld, log));
+        undelegated = await dnsLooksUndelegated(fqdn, log, signal);
       } catch (e) {
-        log(`RDAP still unresolved for ${fqdn}: ${e.message}`, 'error');
+        if (isAbortError(e)) throw e;
+        return;
       }
-    })());
-  });
+      throwIfAborted(signal);
+      if (!undelegated) return;
+      onDnsHit(word);
+      if (!useRdap) return;
+      rdapTasks.push((async () => {
+        try {
+          onRdap(word, await rdapIsUnregistered(fqdn, tld, log, signal));
+        } catch (e) {
+          if (isAbortError(e)) throw e;
+          log(`RDAP still unresolved for ${fqdn}: ${e.message}`, 'error');
+        }
+      })());
+    });
 
-  await Promise.all(rdapTasks);
+    await Promise.all(rdapTasks);
+  } catch (e) {
+    await Promise.allSettled(rdapTasks);
+    throw e;
+  }
 }

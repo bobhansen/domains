@@ -204,6 +204,51 @@ button:focus-visible {
   box-shadow: 0 0 0 3px var(--focus);
 }
 
+.bias-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.55rem;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+
+.bias-field input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.bias-field input[type="number"]::-webkit-outer-spin-button,
+.bias-field input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.bias-stepper {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.bias-stepper button {
+  flex: 1;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  min-height: 1.25rem;
+  padding: 0;
+  background: var(--raised);
+  color: var(--paper);
+  font: 600 0.68rem/1 var(--mono);
+  cursor: pointer;
+}
+
+.bias-stepper button + button { border-top: 1px solid var(--line); }
+
+.bias-stepper button:hover:not(:disabled) { color: var(--copper-bright); }
+
+.bias-stepper button:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .hint {
   margin: 0.35rem 0 0;
   font-size: 0.75rem;

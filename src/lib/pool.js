@@ -15,6 +15,33 @@ export async function asyncPool(poolLimit, array, iteratorFn) {
   return Promise.all(ret);
 }
 
-export function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export function abortError() {
+  return new DOMException('Aborted', 'AbortError');
+}
+
+export function isAbortError(e) {
+  return !!e && (e.name === 'AbortError' || e.code === 20);
+}
+
+export function throwIfAborted(signal) {
+  if (signal?.aborted) throw abortError();
+}
+
+export function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    if (!signal) return;
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(abortError());
+      },
+      { once: true },
+    );
+  });
 }

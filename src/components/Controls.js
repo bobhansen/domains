@@ -1,5 +1,6 @@
 import { html } from '../html.js';
 import { TLD_CHIPS } from '../hooks/useDomainFinder.js';
+import { LIMITS, stepShortBias } from '../lib/limits.js';
 
 export default function Controls({
   tldChoice,
@@ -59,10 +60,12 @@ export default function Controls({
           id="batch-size"
           type="number"
           inputMode="numeric"
-          min=${1}
-          max=${100}
+          min=${LIMITS.target.min}
+          max=${LIMITS.target.max}
+          step=${1}
           value=${targetCount}
           onChange=${(e) => onTargetCountChange(e.target.value)}
+          onBlur=${(e) => onTargetCountChange(e.target.value)}
         />
       </div>
 
@@ -73,10 +76,12 @@ export default function Controls({
             id="min-len"
             type="number"
             inputMode="numeric"
-            min=${2}
-            max=${20}
+            min=${LIMITS.length.min}
+            max=${maxLen}
+            step=${1}
             value=${minLen}
             onChange=${(e) => onMinLenChange(e.target.value)}
+            onBlur=${(e) => onMinLenChange(e.target.value)}
           />
         </div>
         <div>
@@ -85,25 +90,50 @@ export default function Controls({
             id="max-len"
             type="number"
             inputMode="numeric"
-            min=${2}
-            max=${20}
+            min=${minLen}
+            max=${LIMITS.length.max}
+            step=${1}
             value=${maxLen}
             onChange=${(e) => onMaxLenChange(e.target.value)}
+            onBlur=${(e) => onMaxLenChange(e.target.value)}
           />
         </div>
       </div>
 
       <div>
         <label htmlFor="short-bias">Short bias</label>
-        <input
-          id="short-bias"
-          type="number"
-          inputMode="decimal"
-          step=${0.1}
-          min=${0.1}
-          value=${shortBias}
-          onChange=${(e) => onShortBiasChange(e.target.value)}
-        />
+        <div className="bias-field">
+          <input
+            id="short-bias"
+            type="number"
+            inputMode="decimal"
+            step="any"
+            min=${LIMITS.shortBias.min}
+            max=${LIMITS.shortBias.max}
+            value=${shortBias}
+            onChange=${(e) => onShortBiasChange(e.target.value)}
+            onBlur=${(e) => onShortBiasChange(e.target.value)}
+            onKeyDown=${(e) => {
+              if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+              e.preventDefault();
+              onShortBiasChange(stepShortBias(shortBias, e.key === 'ArrowUp' ? 1 : -1));
+            }}
+          />
+          <div className="bias-stepper">
+            <button
+              type="button"
+              aria-label="Multiply short bias by 10"
+              disabled=${Number(shortBias) >= LIMITS.shortBias.max}
+              onClick=${() => onShortBiasChange(stepShortBias(shortBias, 1))}
+            >×10</button>
+            <button
+              type="button"
+              aria-label="Divide short bias by 10"
+              disabled=${Number(shortBias) <= LIMITS.shortBias.min}
+              onClick=${() => onShortBiasChange(stepShortBias(shortBias, -1))}
+            >÷10</button>
+          </div>
+        </div>
         <p className="hint">Higher values prefer shorter invented words.</p>
       </div>
 

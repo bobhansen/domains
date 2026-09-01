@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MarkovGenerator } from '../lib/markov.js';
 import { loadValidTlds } from '../lib/tlds.js';
 import { calculateRequiredBatchSize, expectedHitRate } from '../lib/hitRates.js';
+import { LIMITS, clampFloat, clampInt, clampSettings } from '../lib/limits.js';
 import {
   DNS_CONCURRENCY,
   RDAP_CONCURRENCY,
@@ -26,10 +27,10 @@ export function useDomainFinder() {
 
   const [tldChoice, setTldChoice] = useState('org');
   const [customTld, setCustomTld] = useState('');
-  const [targetCount, setTargetCount] = useState(20);
-  const [minLen, setMinLen] = useState(4);
-  const [maxLen, setMaxLen] = useState(8);
-  const [shortBias, setShortBias] = useState(10);
+  const [targetCount, setTargetCount] = useState(LIMITS.target.fallback);
+  const [minLen, setMinLen] = useState(LIMITS.length.minFallback);
+  const [maxLen, setMaxLen] = useState(LIMITS.length.maxFallback);
+  const [shortBias, setShortBias] = useState(LIMITS.shortBias.fallback);
 
   const generatorRef = useRef(null);
   const validTldsRef = useRef(new Set());
@@ -106,10 +107,16 @@ export function useDomainFinder() {
       return;
     }
 
-    const targetN = Number.parseInt(target, 10) || 20;
-    const minL = Number.parseInt(min, 10) || 4;
-    const maxL = Number.parseInt(max, 10) || 8;
-    const biasN = Number.parseFloat(bias) || 1.0;
+    const {
+      targetCount: targetN,
+      minLen: minL,
+      maxLen: maxL,
+      shortBias: biasN,
+    } = clampSettings({ targetCount: target, minLen: min, maxLen: max, shortBias: bias });
+    setTargetCount(targetN);
+    setMinLen(minL);
+    setMaxLen(maxL);
+    setShortBias(biasN);
     const generator = generatorRef.current;
     const useRdap = tldHasRdap(tld);
 
@@ -225,6 +232,26 @@ export function useDomainFinder() {
     runSearch();
   }, [ready, runSearch]);
 
+  function commitTargetCount(raw) {
+    setTargetCount(clampInt(raw, LIMITS.target.min, LIMITS.target.max, LIMITS.target.fallback));
+  }
+
+  function commitMinLen(raw) {
+    const minL = clampInt(raw, LIMITS.length.min, LIMITS.length.max, LIMITS.length.minFallback);
+    setMinLen(minL);
+    setMaxLen((maxL) => Math.max(minL, clampInt(maxL, LIMITS.length.min, LIMITS.length.max, LIMITS.length.maxFallback)));
+  }
+
+  function commitMaxLen(raw) {
+    const maxL = clampInt(raw, LIMITS.length.min, LIMITS.length.max, LIMITS.length.maxFallback);
+    setMaxLen(maxL);
+    setMinLen((minL) => Math.min(maxL, clampInt(minL, LIMITS.length.min, LIMITS.length.max, LIMITS.length.minFallback)));
+  }
+
+  function commitShortBias(raw) {
+    setShortBias(clampFloat(raw, LIMITS.shortBias.min, LIMITS.shortBias.max, LIMITS.shortBias.fallback));
+  }
+
   return {
     ready,
     busy,
@@ -238,13 +265,13 @@ export function useDomainFinder() {
     customTld,
     setCustomTld,
     targetCount,
-    setTargetCount,
+    setTargetCount: commitTargetCount,
     minLen,
-    setMinLen,
+    setMinLen: commitMinLen,
     maxLen,
-    setMaxLen,
+    setMaxLen: commitMaxLen,
     shortBias,
-    setShortBias,
+    setShortBias: commitShortBias,
     runSearch,
   };
 }
