@@ -3,6 +3,7 @@ import { html } from './html.js';
 import { useDomainFinder } from './hooks/useDomainFinder.js';
 import Controls from './components/Controls.js';
 import ActivityLog from './components/ActivityLog.js';
+import About from './components/About.js';
 import ResultsGrid from './components/ResultsGrid.js';
 
 export default function App() {
@@ -46,7 +47,8 @@ export default function App() {
       <div className=${classes}>
         <header className="mobile-bar">
           <div className="mobile-brand">
-            <h1>Vanity Domains</h1>
+            <h1>Vanity Domain</h1>
+            <${About} />
           </div>
         </header>
 
@@ -68,8 +70,8 @@ export default function App() {
             </button>
           </div>
           <header className="brand">
-            <h1>Vanity Domains</h1>
-            <p className="lede">Discover your own domain that is easy to say, remember, and type.</p>
+            <h1>Vanity Domain</h1>
+            <${About} tagline="Discover your own domain that is easy to say, remember, and type." />
           </header>
 
           <${Controls}

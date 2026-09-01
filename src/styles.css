@@ -126,7 +126,7 @@ body {
   font-size: 0.9375rem;
   font-weight: 400;
   line-height: 1.45;
-  max-width: 36ch;
+  max-width: 42ch;
 }
 
 .panel {
@@ -170,6 +170,8 @@ legend, label {
 .sheet-toggle,
 .dock-start,
 .sheet-close,
+.about-btn,
+.about-dialog-close,
 .length-stepper button {
   touch-action: manipulation;
 }
@@ -313,6 +315,96 @@ button:focus-visible {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.about-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 0.4rem;
+  padding: 0.12rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: 500 0.75rem/1.2 var(--sans);
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.about-btn:hover {
+  color: var(--paper);
+  border-color: var(--copper);
+}
+
+.about-dialog {
+  width: min(42rem, calc(100vw - 1.5rem));
+  max-height: min(40rem, calc(100dvh - 1.5rem));
+  margin: auto;
+  padding: 1.35rem 1.5rem 1.25rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--paper);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+}
+
+.about-dialog::backdrop {
+  background: rgba(8, 6, 4, 0.62);
+}
+
+.about-dialog h3 {
+  margin: 0 0 0.7rem;
+  font-family: var(--display);
+  font-size: 1.85rem;
+  font-weight: 900;
+  font-synthesis: none;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.about-dialog h4 {
+  margin: 1rem 0 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper);
+}
+
+.about-dialog p {
+  margin: 0 0 0.7rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.about-dialog a {
+  color: var(--copper-bright);
+  text-underline-offset: 0.15em;
+}
+
+.about-dialog a:hover {
+  color: var(--paper);
+}
+
+.about-dialog-close {
+  appearance: none;
+  margin: 0.5rem 0 0;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--paper);
+  font: 500 0.875rem/1.2 var(--sans);
+  cursor: pointer;
+}
+
+.about-dialog-close:hover {
+  border-color: var(--copper);
+  color: var(--copper-bright);
 }
 
 .log-window {
@@ -565,9 +657,20 @@ button:focus-visible {
     padding: 0.15rem 0.2rem 0.35rem;
   }
 
+  .mobile-brand {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.55rem;
+  }
+
   .mobile-brand h1 {
     font-size: 1.85rem;
     margin: 0.1rem 0 0;
+  }
+
+  .mobile-brand .about-btn {
+    margin: 0;
   }
 
   .brand { display: none; }
