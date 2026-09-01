@@ -44,7 +44,9 @@ function createServiceGate(initialConcurrency) {
   let coolUntil = 0;
   let gapMs = 0;
   let lastStart = 0;
+  let lastThrottleAt = 0;
   let timer = null;
+  const QUIET_RESTORE_MS = 20_000;
 
   function arm(ms) {
     if (timer) return;
@@ -54,8 +56,18 @@ function createServiceGate(initialConcurrency) {
     }, Math.max(0, ms));
   }
 
+  function restoreIfQuiet(now) {
+    if (now < coolUntil) return;
+    const quietFor = now - Math.max(lastThrottleAt, coolUntil);
+    if (quietFor >= QUIET_RESTORE_MS) {
+      cap = initialConcurrency;
+      gapMs = 0;
+    }
+  }
+
   function pump() {
     const now = Date.now();
+    restoreIfQuiet(now);
     if (now < coolUntil) {
       arm(coolUntil - now);
       return;
@@ -87,10 +99,17 @@ function createServiceGate(initialConcurrency) {
       });
     },
     pause(ms) {
-      coolUntil = Math.max(coolUntil, Date.now() + ms);
+      const now = Date.now();
+      lastThrottleAt = now;
+      coolUntil = Math.max(coolUntil, now + ms);
       gapMs = Math.max(gapMs, Math.min(Math.floor(ms / 3), 2500));
-      if (cap > 1) cap = Math.max(1, Math.ceil(cap / 2));
+      cap = Math.max(1, Math.ceil(cap / 2));
       pump();
+    },
+    succeed() {
+      if (Date.now() < coolUntil) return;
+      if (cap < initialConcurrency) cap = Math.min(initialConcurrency, cap + 1);
+      gapMs = gapMs < 40 ? 0 : Math.floor(gapMs / 2);
     },
     clear(err) {
       if (timer) {
@@ -134,7 +153,10 @@ async function fetchHonoringRateLimit(url, options, concurrency, log, signal) {
       await sleep(wait, signal);
       continue;
     }
-    if (res.status !== 429 && res.status !== 503) return res;
+    if (res.status !== 429 && res.status !== 503) {
+      gate.succeed();
+      return res;
+    }
     const hinted = parseRetryAfterMs(res);
     const wait = hinted != null ? Math.max(hinted, 250) : Math.min(10_000, 500 * 2 ** attempt);
     log(
