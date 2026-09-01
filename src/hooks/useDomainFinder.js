@@ -15,7 +15,11 @@ import {
 import { isAbortError, sleep } from '../lib/pool.js';
 
 const LOG_CAP = 220;
-let autoStarted = false;
+const CUSTOM_TLD_DEBOUNCE_MS = 400;
+
+function resolvedTld(choice, custom) {
+  return (choice === 'custom' ? custom : choice).trim().toLowerCase().replace(/^\./, '');
+}
 
 export const TLD_CHIPS = ['com', 'org', 'net', 'me', 'io', 'co', 'ai', 'app', 'custom'];
 
@@ -43,6 +47,7 @@ export function useDomainFinder() {
   const logIdRef = useRef(0);
   const logFnRef = useRef(() => {});
   const settingsRef = useRef({});
+  const customTldRef = useRef(customTld);
 
   const log = useCallback((msg, type = 'normal') => {
     const id = ++logIdRef.current;
@@ -78,8 +83,21 @@ export function useDomainFinder() {
     };
   }, []);
 
+  const abortCurrent = useCallback(() => {
+    abortRef.current?.abort();
+    abortInFlightRequests();
+  }, []);
+
+  const preemptRun = useCallback(() => {
+    if (!runningRef.current) return;
+    runIdRef.current += 1;
+    abortCurrent();
+    runningRef.current = false;
+    abortRef.current = null;
+  }, [abortCurrent]);
+
   const runSearch = useCallback(async () => {
-    if (runningRef.current || !generatorRef.current) return;
+    if (!generatorRef.current) return;
 
     const {
       tldChoice: choice,
@@ -90,15 +108,21 @@ export function useDomainFinder() {
       shortBias: bias,
     } = settingsRef.current;
 
-    let tld = (choice === 'custom' ? custom : choice).trim().toLowerCase().replace(/^\./, '');
+    const tld = resolvedTld(choice, custom);
     if (!tld) {
+      preemptRun();
+      setBusy(false);
       log('Please enter a TLD.', 'error');
       return;
     }
     if (validTldsRef.current.size > 0 && !validTldsRef.current.has(tld)) {
+      preemptRun();
+      setBusy(false);
       log(`Warning: ".${tld}" does not appear to be a valid IANA TLD.`, 'error');
       return;
     }
+
+    preemptRun();
 
     const {
       targetCount: targetN,
@@ -106,10 +130,6 @@ export function useDomainFinder() {
       maxLen: maxL,
       shortBias: biasN,
     } = clampSettings({ targetCount: target, minLen: min, maxLen: max, shortBias: bias });
-    setTargetCount(targetN);
-    setMinLen(minL);
-    setMaxLen(maxL);
-    setShortBias(biasN);
     const generator = generatorRef.current;
     const useRdap = tldHasRdap(tld);
 
@@ -386,7 +406,7 @@ export function useDomainFinder() {
         log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
       } else if (isAbortError(e) || abort.signal.aborted) {
         log('Search cancelled.');
-        setStatus('Cancelled — change settings and start again.');
+        setStatus('Search stopped.');
       } else {
         log(`Error during search: ${e.message}`, 'error');
         setStatus('Search stopped on an error.');
@@ -398,19 +418,36 @@ export function useDomainFinder() {
       setBusy(false);
       hidePlaceholder();
     }
-  }, [log]);
+  }, [log, preemptRun]);
 
   const cancelSearch = useCallback(() => {
     if (!runningRef.current) return;
-    abortRef.current?.abort();
-    abortInFlightRequests();
-  }, []);
+    abortCurrent();
+  }, [abortCurrent]);
 
   useEffect(() => {
-    if (!ready || autoStarted) return;
-    autoStarted = true;
+    if (!ready) return undefined;
+
+    const tld = resolvedTld(tldChoice, customTld);
+    const customTldChanged = customTldRef.current !== customTld;
+    customTldRef.current = customTld;
+
+    if (!tld) {
+      preemptRun();
+      setBusy(false);
+      return undefined;
+    }
+
+    if (tldChoice === 'custom' && customTldChanged) {
+      preemptRun();
+      setBusy(false);
+      const timer = setTimeout(() => runSearch(), CUSTOM_TLD_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    }
+
     runSearch();
-  }, [ready, runSearch]);
+    return undefined;
+  }, [ready, tldChoice, customTld, targetCount, minLen, maxLen, shortBias, runSearch, preemptRun]);
 
   function commitTargetCount(raw) {
     setTargetCount(clampInt(raw, LIMITS.target.min, LIMITS.target.max, LIMITS.target.fallback));
