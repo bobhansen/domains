@@ -11,8 +11,8 @@
   --sage-dim: #24332c;
   --danger: #e07a6a;
   --focus: rgba(201, 146, 74, 0.35);
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
-  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "Boska", Palatino, "Palatino Linotype", serif;
+  --sans: "Satoshi", system-ui, sans-serif;
   --mono: "Cascadia Code", "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --radius: 16px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -31,9 +31,13 @@ body {
   margin: 0;
   color: var(--paper);
   font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 400;
   line-height: 1.45;
   background: var(--ink);
   color-scheme: dark;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
 }
 
 .atmosphere {
@@ -92,20 +96,22 @@ body {
 
 .brand h1,
 .mobile-brand h1 {
-  margin: 0.15rem 0 0.4rem;
-  font-family: var(--serif);
-  font-size: clamp(1.8rem, 2.4vw, 2.35rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  margin: 0.15rem 0 0.45rem;
+  font-family: var(--display);
+  font-size: clamp(2.15rem, 3.2vw, 2.7rem);
+  font-weight: 900;
+  font-style: normal;
+  font-synthesis: none;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
   color: var(--paper);
 }
 
 .eyebrow {
   margin: 0;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--copper);
 }
@@ -113,8 +119,10 @@ body {
 .lede {
   margin: 0;
   color: var(--muted);
-  font-size: 0.88rem;
-  max-width: 34ch;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.45;
+  max-width: 36ch;
 }
 
 .panel {
@@ -140,9 +148,9 @@ fieldset {
 legend, label {
   display: block;
   margin-bottom: 0.4rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -226,7 +234,7 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   min-height: 2.6rem;
-  font: 600 0.95rem/1 var(--sans);
+  font: 500 0.9375rem/1.2 var(--sans);
   color: var(--paper);
 }
 
@@ -236,7 +244,7 @@ button:focus-visible {
   border-radius: 0;
   background: var(--raised);
   color: var(--paper);
-  font: 600 1.05rem/1 var(--sans);
+  font: 500 1.05rem/1.2 var(--sans);
   cursor: pointer;
 }
 
@@ -262,8 +270,8 @@ button:focus-visible {
   color: var(--ink);
   border: 1px solid transparent;
   border-radius: 10px;
-  font: 600 0.95rem/1 var(--sans);
-  letter-spacing: 0.01em;
+  font: 500 1rem/1.25 var(--sans);
+  letter-spacing: 0.02em;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease;
 }
@@ -296,9 +304,9 @@ button:focus-visible {
 
 .log-panel h2 {
   margin: 0 0 0.55rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -312,7 +320,7 @@ button:focus-visible {
   background: #0c0a08;
   border: 1px solid var(--line);
   border-radius: 10px;
-  font: 0.75rem/1.45 var(--mono);
+  font: 0.8125rem/1.45 var(--mono);
   color: var(--muted);
 }
 
@@ -336,10 +344,12 @@ button:focus-visible {
 
 .stage-head h2 {
   margin: 0;
-  font-family: var(--serif);
-  font-size: clamp(1.7rem, 2.4vw, 2.15rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .stats {
@@ -354,8 +364,9 @@ button:focus-visible {
 .stats div { text-align: left; }
 
 .stats dt {
-  font-size: 0.65rem;
-  letter-spacing: 0.14em;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -364,7 +375,7 @@ button:focus-visible {
   margin: 0.1rem 0 0;
   font-family: var(--mono);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--paper);
 }
 
@@ -425,23 +436,24 @@ button:focus-visible {
 }
 
 .domain-card .stem {
-  font-family: var(--serif);
-  font-size: 1.35rem;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
+  font-family: var(--sans);
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
 .domain-card .suffix {
   font-family: var(--mono);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   color: var(--sage);
 }
 
 .domain-card .hint {
   margin-top: 0.35rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
@@ -562,7 +574,7 @@ button:focus-visible {
   }
 
   .mobile-brand h1 {
-    font-size: 1.45rem;
+    font-size: 1.85rem;
     margin: 0.1rem 0 0;
   }
 
@@ -576,8 +588,6 @@ button:focus-visible {
   .stage-head {
     padding-bottom: 0.75rem;
   }
-
-  .stage-head h2 { font-size: 1.25rem; }
 
   .scrim {
     display: block;
@@ -620,9 +630,9 @@ button:focus-visible {
 
   .sheet-title {
     margin: 0;
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.16em;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
   }
@@ -635,7 +645,7 @@ button:focus-visible {
     border-radius: 999px;
     min-height: 2.25rem;
     padding: 0.3rem 0.85rem;
-    font: 600 0.85rem/1 var(--sans);
+    font: 500 0.875rem/1.2 var(--sans);
     cursor: pointer;
   }
 
@@ -675,7 +685,7 @@ button:focus-visible {
     border-radius: 999px;
     background: var(--paper);
     color: var(--ink);
-    font: 600 0.95rem/1 var(--sans);
+    font: 500 1rem/1.25 var(--sans);
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
     cursor: pointer;
   }
@@ -701,7 +711,7 @@ button:focus-visible {
 @media (max-width: 420px) {
   .results-grid { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
   .domain-card { padding: 0.75rem 1.4rem 0.7rem 0.75rem; }
-  .domain-card .stem { font-size: 1.15rem; }
+  .domain-card .stem { font-size: 1.125rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
