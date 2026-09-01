@@ -6,10 +6,12 @@ import { LIMITS, clampFloat, clampInt, clampSettings } from '../lib/limits.js';
 import {
   DNS_CONCURRENCY,
   RDAP_CONCURRENCY,
+  abortInFlightRequests,
   initRdapBootstrap,
   scanNames,
   tldHasRdap,
 } from '../lib/availability.js';
+import { isAbortError } from '../lib/pool.js';
 
 const LOG_CAP = 220;
 let autoStarted = false;
@@ -35,6 +37,7 @@ export function useDomainFinder() {
   const generatorRef = useRef(null);
   const validTldsRef = useRef(new Set());
   const runningRef = useRef(false);
+  const abortRef = useRef(null);
   const logIdRef = useRef(0);
   const logFnRef = useRef(() => {});
   const settingsRef = useRef({});
@@ -120,6 +123,8 @@ export function useDomainFinder() {
     const generator = generatorRef.current;
     const useRdap = tldHasRdap(tld);
 
+    const abort = new AbortController();
+    abortRef.current = abort;
     runningRef.current = true;
     setBusy(true);
     setResults([]);
@@ -149,6 +154,7 @@ export function useDomainFinder() {
 
     try {
       while (allAvailable.length < targetN) {
+        if (abort.signal.aborted) break;
         let remaining = targetN - allAvailable.length;
         let queriesNeeded = calculateRequiredBatchSize(remaining, currentRate, 0.95);
         if (queriesNeeded < 5) queriesNeeded = 5;
@@ -181,8 +187,10 @@ export function useDomainFinder() {
 
         const roundAvailable = [];
         await scanNames(candidates, tld, {
+          signal: abort.signal,
           log: (msg, type) => log(msg, type),
           onDnsHit(word) {
+            if (abort.signal.aborted) return;
             upsertChit(word, tld, useRdap ? 'pending' : 'available');
             if (!useRdap) {
               roundAvailable.push(`${word}.${tld}`);
@@ -191,6 +199,7 @@ export function useDomainFinder() {
             emitStats(allAvailable.length, totalChecked + candidates.length);
           },
           onRdap(word, ok) {
+            if (abort.signal.aborted) return;
             upsertChit(word, tld, ok ? 'available' : 'taken');
             if (ok) {
               roundAvailable.push(`${word}.${tld}`);
@@ -215,12 +224,23 @@ export function useDomainFinder() {
         round++;
       }
 
-      setStatus(`Done · ${allAvailable.length} of ${targetN} · ${totalChecked} checked`);
-      log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
+      if (abort.signal.aborted) {
+        log('Search cancelled.');
+        setStatus('Cancelled — change settings and start again.');
+      } else {
+        setStatus(`Done · ${allAvailable.length} of ${targetN} · ${totalChecked} checked`);
+        log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
+      }
     } catch (e) {
-      log(`Error during search: ${e.message}`, 'error');
-      setStatus('Search stopped on an error.');
+      if (isAbortError(e) || abort.signal.aborted) {
+        log('Search cancelled.');
+        setStatus('Cancelled — change settings and start again.');
+      } else {
+        log(`Error during search: ${e.message}`, 'error');
+        setStatus('Search stopped on an error.');
+      }
     } finally {
+      if (abortRef.current === abort) abortRef.current = null;
       runningRef.current = false;
       setBusy(false);
     }
@@ -273,5 +293,6 @@ export function useDomainFinder() {
     shortBias,
     setShortBias: commitShortBias,
     runSearch,
+    cancelSearch,
   };
 }
