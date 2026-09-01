@@ -6,206 +6,536 @@
     <title>Find My Domain</title>
     <style>
         :root {
-            --bg-color: #0f172a;
-            --panel-bg: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --primary: #3b82f6;
-            --primary-hover: #2563eb;
-            --success: #10b981;
-            --danger: #ef4444;
-            --border: #334155;
-            --font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --ink: #14110e;
+            --panel: #1c1916;
+            --raised: #25211d;
+            --line: #3d362f;
+            --paper: #f3ece3;
+            --muted: #a89a8c;
+            --copper: #c9924a;
+            --copper-bright: #e0b06a;
+            --sage: #9dcfb0;
+            --sage-dim: #24332c;
+            --danger: #e07a6a;
+            --focus: rgba(201, 146, 74, 0.35);
+            --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+            --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+            --mono: "Cascadia Code", "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
         }
+
+        * { box-sizing: border-box; }
+
+        html, body { min-height: 100%; }
 
         body {
             margin: 0;
-            padding: 2rem;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: var(--font-family);
-            line-height: 1.5;
-            display: flex;
-            justify-content: center;
+            color: var(--paper);
+            font-family: var(--sans);
+            line-height: 1.45;
+            background: var(--ink);
+            color-scheme: dark;
         }
 
-        .container {
-            max-width: 900px;
-            width: 100%;
+        .atmosphere {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background:
+                radial-gradient(ellipse 70% 45% at 8% -8%, rgba(201, 146, 74, 0.16), transparent 55%),
+                radial-gradient(ellipse 50% 40% at 100% 110%, rgba(90, 130, 110, 0.14), transparent 50%),
+                var(--ink);
+        }
+
+        .atmosphere::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: 0.35;
+            mix-blend-mode: overlay;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.7  0 0 0 0 0.62  0 0 0 0 0.5  0 0 0 0.18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+        }
+
+        .app {
+            position: relative;
+            z-index: 1;
             display: grid;
-            grid-template-columns: 300px 1fr;
-            gap: 2rem;
+            grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+            gap: 1.75rem;
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 1.5rem clamp(1rem, 3vw, 2rem) 2rem;
         }
 
-        @media (max-width: 768px) {
-            .container { grid-template-columns: 1fr; }
+        .rail {
+            display: flex;
+            flex-direction: column;
+            gap: 1.1rem;
+            position: sticky;
+            top: 1.25rem;
+            max-height: calc(100vh - 2.5rem);
         }
 
-        h1 { margin-top: 0; font-size: 1.5rem; color: #fff; }
-        
+        .brand h1 {
+            margin: 0.15rem 0 0.4rem;
+            font-family: var(--serif);
+            font-size: clamp(1.8rem, 2.4vw, 2.35rem);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1.05;
+            color: var(--paper);
+        }
+
+        .eyebrow {
+            margin: 0;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--copper);
+        }
+
+        .lede {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.88rem;
+            max-width: 34ch;
+        }
+
         .panel {
-            background: var(--panel-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent 40%), var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
         }
 
-        label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            color: var(--text-muted);
-        }
-
-        input, select {
-            width: 100%;
-            padding: 0.5rem;
-            background: var(--bg-color);
-            border: 1px solid var(--border);
-            color: var(--text-main);
-            border-radius: 6px;
-            margin-bottom: 1rem;
-            box-sizing: border-box;
-            font-family: inherit;
-        }
-        
-        input:focus, select:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-        }
-
-        button {
-            width: 100%;
-            padding: 0.75rem;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        button:hover:not(:disabled) { background: var(--primary-hover); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .log-window {
-            background: #020617;
-            border-radius: 6px;
-            padding: 1rem;
-            height: 200px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-bottom: 1.5rem;
-            border: 1px solid var(--border);
-        }
-
-        .log-entry { margin-bottom: 4px; }
-        .log-success { color: var(--success); }
-        .log-error { color: var(--danger); }
-
-        .results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 1rem;
-        }
-
-        .domain-card {
-            background: var(--bg-color);
-            border: 1px solid var(--border);
-            padding: 1rem;
-            border-radius: 8px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 1.1rem;
-            color: var(--success);
+        .controls {
+            padding: 1.05rem 1.1rem 1.15rem;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: fadeIn 0.3s ease-in;
-            text-decoration: none;
+            flex-direction: column;
+            gap: 0.85rem;
         }
 
-        a.domain-card:hover {
-            border-color: var(--success);
-            color: #34d399;
+        fieldset {
+            border: 0;
+            margin: 0;
+            padding: 0;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        legend, label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+        }
+
+        .tld-chip {
+            appearance: none;
+            border: 1px solid var(--line);
+            background: var(--raised);
+            color: var(--paper);
+            border-radius: 999px;
+            padding: 0.28rem 0.65rem;
+            font: 600 0.8rem/1.2 var(--mono);
+            cursor: pointer;
+        }
+
+        .tld-chip:hover { border-color: var(--copper); color: var(--copper-bright); }
+
+        .tld-chip.is-active {
+            background: var(--copper);
+            border-color: var(--copper);
+            color: #1a130c;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .pair {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.7rem;
+        }
+
+        input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 0.55rem 0.7rem;
+            background: var(--ink);
+            border: 1px solid var(--line);
+            color: var(--paper);
+            border-radius: 8px;
+            font: 500 0.95rem/1.2 var(--mono);
+        }
+
+        input:focus, .tld-chip:focus-visible, button:focus-visible {
+            outline: none;
+            border-color: var(--copper);
+            box-shadow: 0 0 0 3px var(--focus);
+        }
+
+        .hint {
+            margin: 0.35rem 0 0;
+            font-size: 0.75rem;
+            color: var(--muted);
         }
 
         #custom-tld-container { display: none; }
+        #custom-tld-container.is-open { display: block; }
+
+        #start-btn {
+            width: 100%;
+            margin-top: 0.2rem;
+            padding: 0.8rem 1rem;
+            background: var(--paper);
+            color: var(--ink);
+            border: 0;
+            border-radius: 10px;
+            font: 600 0.95rem/1 var(--sans);
+            letter-spacing: 0.01em;
+            cursor: pointer;
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        #start-btn:hover:not(:disabled) {
+            background: #fff;
+            transform: translateY(-1px);
+        }
+
+        #start-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+        .log-panel {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 0.85rem 0.95rem 1rem;
+        }
+
+        .log-panel h2 {
+            margin: 0 0 0.55rem;
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .log-window {
+            flex: 1;
+            min-height: 7.5rem;
+            max-height: 28vh;
+            overflow-y: auto;
+            padding: 0.7rem 0.75rem;
+            background: #0c0a08;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            font: 0.75rem/1.45 var(--mono);
+            color: var(--muted);
+        }
+
+        .log-entry { margin: 0 0 0.2rem; }
+        .log-success { color: var(--sage); }
+        .log-error { color: var(--danger); }
+
+        .stage {
+            min-width: 0;
+            padding: 1.25rem 1.35rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.1rem;
+        }
+
+        .stage-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .stage-head h2 {
+            margin: 0;
+            font-family: var(--serif);
+            font-size: 1.55rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .stage-sub {
+            margin: 0.25rem 0 0;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .stats {
+            display: flex;
+            gap: 1.25rem;
+            margin: 0;
+        }
+
+        .stats div { text-align: right; }
+
+        .stats dt {
+            font-size: 0.65rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .stats dd {
+            margin: 0.1rem 0 0;
+            font-family: var(--mono);
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--paper);
+        }
+
+        #found-count { color: var(--sage); }
+
+        body.is-busy .stage-sub::before {
+            content: "";
+            display: inline-block;
+            width: 0.5rem;
+            height: 0.5rem;
+            margin-right: 0.45rem;
+            border-radius: 50%;
+            background: var(--copper);
+            box-shadow: 0 0 0 0 rgba(201, 146, 74, 0.6);
+            animation: pulse 1.6s ease-out infinite;
+            vertical-align: middle;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .empty {
+            margin: 2.5rem auto;
+            max-width: 28ch;
+            text-align: center;
+            font-family: var(--serif);
+            font-style: italic;
+            font-size: 1.15rem;
+            color: var(--muted);
+        }
+
+        .empty[hidden], .results-grid:empty + .empty { display: block; }
+        .empty[hidden] { display: none !important; }
+
+        .domain-card {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.15rem;
+            padding: 0.9rem 0.95rem 0.8rem;
+            background: var(--raised);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            text-decoration: none;
+            color: var(--paper);
+            animation: fadeIn 0.35s ease both;
+            transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+        }
+
+        .domain-card:hover {
+            border-color: var(--sage);
+            background: var(--sage-dim);
+            transform: translateY(-2px);
+        }
+
+        .domain-card .stem {
+            font-family: var(--serif);
+            font-size: 1.35rem;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            overflow-wrap: anywhere;
+        }
+
+        .domain-card .suffix {
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            color: var(--sage);
+        }
+
+        .domain-card .hint {
+            margin-top: 0.35rem;
+            font-size: 0.68rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        .domain-card:hover .hint,
+        .domain-card:focus-visible .hint { opacity: 1; }
+
         .loader {
             display: inline-block;
-            width: 12px; height: 12px;
-            border: 2px solid rgba(255,255,255,0.3);
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(20, 17, 14, 0.25);
             border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
+            border-top-color: var(--ink);
+            animation: spin 0.8s linear infinite;
             margin-right: 8px;
             vertical-align: middle;
         }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: none; }
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(201, 146, 74, 0.55); }
+            100% { box-shadow: 0 0 0 10px rgba(201, 146, 74, 0); }
+        }
+
+        @media (max-width: 860px) {
+            .app { grid-template-columns: 1fr; padding-bottom: 3rem; }
+            .rail {
+                position: static;
+                max-height: none;
+            }
+            .log-window { max-height: 9rem; }
+            .stage-head { flex-direction: column; align-items: flex-start; }
+            .stats div { text-align: left; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <!-- Settings Panel -->
-    <div class="panel h-fit">
-        <h1>Domain Generator</h1>
-        
-        <label>TLD</label>
-        <select id="tld-select">
-            <option value="com">.com</option>
-            <option value="org" selected>.org</option>
-            <option value="net">.net</option>
-            <option value="me">.me</option>
-            <option value="io">.io</option>
-            <option value="co">.co</option>
-            <option value="ai">.ai</option>
-            <option value="app">.app</option>
-            <option value="custom">Custom...</option>
-        </select>
+<div class="atmosphere" aria-hidden="true"></div>
 
-        <div id="custom-tld-container">
-            <label>Custom TLD (no dot)</label>
-            <input type="text" id="tld-custom" placeholder="e.g. tech">
-        </div>
+<div class="app">
+    <aside class="rail">
+        <header class="brand">
+            <p class="eyebrow">Name foundry</p>
+            <h1>Find My Domain</h1>
+            <p class="lede">Find available domains names that are easy to say, remember, and type.</p>
+        </header>
 
-        <label>Target Available Count</label>
-        <input type="number" id="batch-size" value="20" min="1" max="100">
+        <form class="panel controls" onsubmit="return false">
+            <fieldset>
+                <legend>TLD</legend>
+                <div class="chip-row" id="tld-chips">
+                    <button type="button" class="tld-chip" data-tld="com">.com</button>
+                    <button type="button" class="tld-chip is-active" data-tld="org">.org</button>
+                    <button type="button" class="tld-chip" data-tld="net">.net</button>
+                    <button type="button" class="tld-chip" data-tld="me">.me</button>
+                    <button type="button" class="tld-chip" data-tld="io">.io</button>
+                    <button type="button" class="tld-chip" data-tld="co">.co</button>
+                    <button type="button" class="tld-chip" data-tld="ai">.ai</button>
+                    <button type="button" class="tld-chip" data-tld="app">.app</button>
+                    <button type="button" class="tld-chip" data-tld="custom">Custom</button>
+                </div>
+                <select id="tld-select" class="sr-only" aria-label="TLD">
+                    <option value="com">.com</option>
+                    <option value="org" selected>.org</option>
+                    <option value="net">.net</option>
+                    <option value="me">.me</option>
+                    <option value="io">.io</option>
+                    <option value="co">.co</option>
+                    <option value="ai">.ai</option>
+                    <option value="app">.app</option>
+                    <option value="custom">Custom...</option>
+                </select>
+                <div id="custom-tld-container">
+                    <label for="tld-custom">Custom TLD</label>
+                    <input type="text" id="tld-custom" placeholder="tech" autocomplete="off" spellcheck="false">
+                </div>
+            </fieldset>
 
-        <label>Min Length</label>
-        <input type="number" id="min-len" value="4" min="2" max="20">
+            <div>
+                <label for="batch-size">Target available</label>
+                <input type="number" id="batch-size" value="20" min="1" max="100">
+            </div>
 
-        <label>Max Length</label>
-        <input type="number" id="max-len" value="8" min="2" max="20">
+            <div class="pair">
+                <div>
+                    <label for="min-len">Min length</label>
+                    <input type="number" id="min-len" value="4" min="2" max="20">
+                </div>
+                <div>
+                    <label for="max-len">Max length</label>
+                    <input type="number" id="max-len" value="8" min="2" max="20">
+                </div>
+            </div>
 
-        <label>Short Bias Multiplier</label>
-        <input type="number" id="short-bias" value="10" step="0.1" min="0.1">
+            <div>
+                <label for="short-bias">Short bias</label>
+                <input type="number" id="short-bias" value="10" step="0.1" min="0.1">
+                <p class="hint">Higher values prefer shorter invented words.</p>
+            </div>
 
-        <button id="start-btn">Start Generating</button>
-    </div>
+            <button id="start-btn" type="button">Start generating</button>
+        </form>
 
-    <!-- Main View -->
-    <div class="panel">
-        <div class="log-window" id="log-window">
-            <div class="log-entry">Initializing system...</div>
-        </div>
-        
-        <h2 style="margin-top: 0; font-size: 1.25rem;">Available Domains <span id="found-count">(0)</span></h2>
-        <div class="results-grid" id="results-grid">
-            <!-- Results populated here -->
-        </div>
-    </div>
+        <section class="panel log-panel">
+            <h2>Activity</h2>
+            <div class="log-window" id="log-window" aria-live="polite">
+                <div class="log-entry">Initializing system...</div>
+            </div>
+        </section>
+    </aside>
+
+    <main class="panel stage">
+        <header class="stage-head">
+            <div>
+                <h2>Available names</h2>
+                <p class="stage-sub" id="status-line">Loading word model…</p>
+            </div>
+            <dl class="stats">
+                <div>
+                    <dt>Found</dt>
+                    <dd id="found-count">0</dd>
+                </div>
+                <div>
+                    <dt>Checked</dt>
+                    <dd id="checked-count">0</dd>
+                </div>
+                <div>
+                    <dt>Hit rate</dt>
+                    <dd id="hit-rate">—</dd>
+                </div>
+            </dl>
+        </header>
+
+        <div class="results-grid" id="results-grid"></div>
+        <p class="empty" id="empty-state">Working on finding domain names for you...</p>
+    </main>
 </div>
 
 <script>
@@ -377,23 +707,22 @@
         generate(minLen, maxLen, shortBias) {
             for (let attempt = 0; attempt < 100; attempt++) {
                 let word = this.starts[Math.floor(Math.random() * this.starts.length)];
-                
+
                 while (word.length < 50) {
                     let state = word.slice(-this.nGram);
                     let choices = this.transitions[state];
-                    
+
                     if (!choices || choices.length === 0) break;
 
                     let nextChar;
                     if (shortBias !== 1.0 && choices.includes(null)) {
-                        // Weighted random
                         let counts = new Map();
                         for (let c of choices) counts.set(c, (counts.get(c) || 0) + 1);
-                        
+
                         let population = Array.from(counts.keys());
                         let weights = population.map(c => c === null ? counts.get(c) * shortBias : counts.get(c));
                         let totalWeight = weights.reduce((a, b) => a + b, 0);
-                        
+
                         let r = Math.random() * totalWeight;
                         for (let i = 0; i < population.length; i++) {
                             r -= weights[i];
@@ -451,36 +780,86 @@
     const generator = new MarkovGenerator();
     let isRunning = false;
 
-    // DOM Elements
     const tldSelect = document.getElementById('tld-select');
+    const tldChips = document.getElementById('tld-chips');
     const customTldContainer = document.getElementById('custom-tld-container');
     const tldCustom = document.getElementById('tld-custom');
     const btnStart = document.getElementById('start-btn');
     const resultsGrid = document.getElementById('results-grid');
     const foundCountEl = document.getElementById('found-count');
+    const checkedCountEl = document.getElementById('checked-count');
+    const hitRateEl = document.getElementById('hit-rate');
+    const statusLine = document.getElementById('status-line');
+    const emptyState = document.getElementById('empty-state');
 
-    tldSelect.addEventListener('change', (e) => {
-        customTldContainer.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    function syncTldChips() {
+        const value = tldSelect.value;
+        tldChips.querySelectorAll('.tld-chip').forEach(btn => {
+            btn.classList.toggle('is-active', btn.dataset.tld === value);
+        });
+        customTldContainer.classList.toggle('is-open', value === 'custom');
+    }
+
+    function updateStats(found, checked) {
+        foundCountEl.textContent = String(found);
+        checkedCountEl.textContent = String(checked);
+        hitRateEl.textContent = checked ? `${((found / checked) * 100).toFixed(1)}%` : '—';
+        emptyState.hidden = found > 0;
+    }
+
+    function addDomainCard(dom, tld) {
+        const stem = dom.slice(0, -(tld.length + 1));
+        const a = document.createElement('a');
+        a.className = 'domain-card';
+        a.href = `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(dom)}`;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+
+        const stemEl = document.createElement('span');
+        stemEl.className = 'stem';
+        stemEl.textContent = stem;
+
+        const suffixEl = document.createElement('span');
+        suffixEl.className = 'suffix';
+        suffixEl.textContent = '.' + tld;
+
+        const hintEl = document.createElement('span');
+        hintEl.className = 'hint';
+        hintEl.textContent = 'Namecheap ↗';
+
+        a.append(stemEl, suffixEl, hintEl);
+        resultsGrid.appendChild(a);
+    }
+
+    tldChips.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tld-chip');
+        if (!btn) return;
+        tldSelect.value = btn.dataset.tld;
+        syncTldChips();
+        if (btn.dataset.tld === 'custom') tldCustom.focus();
     });
+
+    tldSelect.addEventListener('change', syncTldChips);
+    syncTldChips();
 
     async function bootstrap() {
         btnStart.disabled = true;
-        btnStart.innerHTML = '<div class="loader"></div> Loading...';
+        btnStart.innerHTML = '<span class="loader"></span> Loading...';
+        statusLine.textContent = 'Loading word model…';
         await initTLDs();
         await generator.init();
         btnStart.disabled = false;
-        btnStart.innerText = 'Start Generating';
-        
-        // Auto-start on load as requested
-        runMainLoop(); 
+        btnStart.innerText = 'Start generating';
+        statusLine.textContent = 'Ready — searching automatically.';
+        runMainLoop();
     }
 
     async function runMainLoop() {
         if (isRunning) return;
-        
+
         let tld = tldSelect.value === 'custom' ? tldCustom.value.trim().toLowerCase() : tldSelect.value;
-        tld = tld.replace(/^\./, ''); // remove leading dot if user typed it
-        
+        tld = tld.replace(/^\./, '');
+
         if (!tld) {
             log("Please enter a custom TLD.", "error");
             return;
@@ -497,14 +876,16 @@
         const shortBias = parseFloat(document.getElementById('short-bias').value) || 1.0;
 
         isRunning = true;
+        document.body.classList.add('is-busy');
         btnStart.disabled = true;
-        btnStart.innerHTML = '<div class="loader"></div> Searching...';
-        resultsGrid.innerHTML = ''; // Clear previous results
-        foundCountEl.innerText = '(0)';
-        
+        btnStart.innerHTML = '<span class="loader"></span> Searching...';
+        resultsGrid.innerHTML = '';
+        updateStats(0, 0);
+        statusLine.textContent = `Searching .${tld} · ${minLen}–${maxLen} letters`;
+
         let allAvailable = [];
         let checkedHistory = new Set();
-        let currentRate = 0.20; // Assume 20% available to start
+        let currentRate = 0.20;
         let totalChecked = 0;
         let round = 1;
 
@@ -514,13 +895,13 @@
             while (allAvailable.length < targetCount) {
                 let remaining = targetCount - allAvailable.length;
                 let queriesNeeded = calculateRequiredBatchSize(remaining, currentRate, 0.95);
-                
-                // Cap queries per round to avoid overloading the browser network queue
-                if (queriesNeeded > 150) queriesNeeded = 150; 
+
+                if (queriesNeeded > 150) queriesNeeded = 150;
                 if (queriesNeeded < 5) queriesNeeded = 5;
 
                 log(`--- Round ${round} ---`);
                 log(`Calculated ${queriesNeeded} queries needed (Rate est: ${(currentRate*100).toFixed(1)}%)`);
+                statusLine.textContent = `Searching .${tld} · round ${round}`;
 
                 let candidates = [];
                 let attempts = 0;
@@ -538,10 +919,9 @@
                 }
 
                 candidates.forEach(c => checkedHistory.add(c));
-                
+
                 log(`Checking ${candidates.length} domains against Cloudflare DoH...`);
 
-                // Concurrent checking (limit 15 at a time)
                 let results = await asyncPool(15, candidates, async (word) => {
                     let isAvail = await checkDomainAvailability(`${word}.${tld}`);
                     return { word, isAvail };
@@ -550,47 +930,38 @@
                 let roundAvailable = results.filter(r => r.isAvail).map(r => `${r.word}.${tld}`);
                 allAvailable.push(...roundAvailable);
                 totalChecked += candidates.length;
+                updateStats(allAvailable.length, totalChecked);
 
                 if (roundAvailable.length > 0) {
                     log(`Found ${roundAvailable.length} this round!`, 'success');
-                    roundAvailable.forEach(dom => {
-                        let a = document.createElement('a');
-                        a.className = 'domain-card';
-                        a.href = `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(dom)}`;
-                        a.target = '_blank';
-                        a.rel = 'noopener noreferrer';
-                        a.innerText = dom;
-                        resultsGrid.appendChild(a);
-                    });
-                    foundCountEl.innerText = `(${allAvailable.length})`;
+                    roundAvailable.forEach(dom => addDomainCard(dom, tld));
                 } else {
                     log("None found this round.");
                 }
 
-                // Update real-world rate
                 if (totalChecked > 0) {
                     currentRate = Math.max(0.01, allAvailable.length / totalChecked);
                 }
-                
+
                 round++;
             }
-            
+
+            statusLine.textContent = `Done · ${allAvailable.length} of ${targetCount} · ${totalChecked} checked`;
             log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
 
         } catch (e) {
             log(`Error during search: ${e.message}`, 'error');
+            statusLine.textContent = 'Search stopped on an error.';
         } finally {
             isRunning = false;
+            document.body.classList.remove('is-busy');
             btnStart.disabled = false;
-            btnStart.innerText = 'Start Generating';
+            btnStart.innerText = 'Start generating';
         }
     }
 
     btnStart.addEventListener('click', runMainLoop);
-
-    // Boot up
     window.onload = bootstrap;
-
 </script>
 </body>
 </html>
