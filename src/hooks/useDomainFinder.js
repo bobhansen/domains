@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MarkovGenerator } from '../lib/markov.js';
 import { loadValidTlds } from '../lib/tlds.js';
 import { expectedHitRate } from '../lib/hitRates.js';
-import { LIMITS, clampFloat, clampInt, clampSettings } from '../lib/limits.js';
+import { LIMITS, clampInt, clampSettings, snapShortBias } from '../lib/limits.js';
 import {
   DNS_CONCURRENCY,
   RDAP_CONCURRENCY,
@@ -429,7 +429,7 @@ export function useDomainFinder() {
   }
 
   function commitShortBias(raw) {
-    setShortBias(clampFloat(raw, LIMITS.shortBias.min, LIMITS.shortBias.max, LIMITS.shortBias.fallback));
+    setShortBias(snapShortBias(raw));
   }
 
   return {

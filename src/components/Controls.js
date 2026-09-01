@@ -1,6 +1,6 @@
 import { html } from '../html.js';
 import { TLD_CHIPS } from '../hooks/useDomainFinder.js';
-import { LIMITS, stepShortBias } from '../lib/limits.js';
+import { LIMITS, LENGTH_PRESETS, lengthPresetIndex, stepLengthPreset } from '../lib/limits.js';
 
 export default function Controls({
   tldChoice,
@@ -19,6 +19,9 @@ export default function Controls({
   busy,
   onStart,
 }) {
+  const presetIndex = lengthPresetIndex(shortBias);
+  const preset = LENGTH_PRESETS[presetIndex];
+
   return html`
     <form className="panel controls" onSubmit=${(e) => e.preventDefault()}>
       <fieldset>
@@ -101,40 +104,26 @@ export default function Controls({
       </div>
 
       <div>
-        <label htmlFor="short-bias">Short bias</label>
-        <div className="bias-field">
-          <input
-            id="short-bias"
-            type="number"
-            inputMode="decimal"
-            step="any"
-            min=${LIMITS.shortBias.min}
-            max=${LIMITS.shortBias.max}
-            value=${shortBias}
-            onChange=${(e) => onShortBiasChange(e.target.value)}
-            onBlur=${(e) => onShortBiasChange(e.target.value)}
-            onKeyDown=${(e) => {
-              if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-              e.preventDefault();
-              onShortBiasChange(stepShortBias(shortBias, e.key === 'ArrowUp' ? 1 : -1));
-            }}
-          />
-          <div className="bias-stepper">
-            <button
-              type="button"
-              aria-label="Multiply short bias by 10"
-              disabled=${Number(shortBias) >= LIMITS.shortBias.max}
-              onClick=${() => onShortBiasChange(stepShortBias(shortBias, 1))}
-            >×10</button>
-            <button
-              type="button"
-              aria-label="Divide short bias by 10"
-              disabled=${Number(shortBias) <= LIMITS.shortBias.min}
-              onClick=${() => onShortBiasChange(stepShortBias(shortBias, -1))}
-            >÷10</button>
-          </div>
+        <label id="length-mix-label">Random lengths</label>
+        <div
+          className="length-stepper"
+          role="group"
+          aria-labelledby="length-mix-label"
+        >
+          <button
+            type="button"
+            aria-label="Shorter names"
+            disabled=${presetIndex <= 0}
+            onClick=${() => onShortBiasChange(stepLengthPreset(shortBias, -1))}
+          >←</button>
+          <p className="length-stepper-value" aria-live="polite">${preset.label}</p>
+          <button
+            type="button"
+            aria-label="Longer names"
+            disabled=${presetIndex >= LENGTH_PRESETS.length - 1}
+            onClick=${() => onShortBiasChange(stepLengthPreset(shortBias, 1))}
+          >→</button>
         </div>
-        <p className="hint">Higher values prefer shorter invented words.</p>
       </div>
 
       <button className=${`start-btn${busy ? ' is-stop' : ''}`} type="button" disabled=${!ready} onClick=${onStart}>

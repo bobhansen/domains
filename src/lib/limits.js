@@ -1,8 +1,16 @@
 export const LIMITS = {
   target: { min: 1, max: 250, fallback: 20 },
   length: { min: 3, max: 20, minFallback: 4, maxFallback: 8 },
-  shortBias: { min: 0.1, max: 1_000_000, fallback: 10 },
+  shortBias: { min: 0.1, max: 1000, fallback: 10 },
 };
+
+export const LENGTH_PRESETS = [
+  { id: 'shorter', label: 'Shorter', bias: 1000 },
+  { id: 'short', label: 'Short', bias: 10 },
+  { id: 'normal', label: 'Normal', bias: 1 },
+  { id: 'long', label: 'Long', bias: 0.5 },
+  { id: 'longer', label: 'Longer', bias: 0.1 },
+];
 
 export function clampInt(value, min, max, fallback) {
   const n = typeof value === 'number' ? value : Number.parseInt(value, 10);
@@ -16,17 +24,36 @@ export function clampFloat(value, min, max, fallback) {
   return Math.min(max, Math.max(min, n));
 }
 
-export function stepShortBias(value, direction) {
-  const { min, max, fallback } = LIMITS.shortBias;
-  const n = clampFloat(value, min, max, fallback);
-  const next = direction < 0 ? n / 10 : n * 10;
-  if (direction < 0 && next < min) return min;
-  if (direction > 0 && next > max) return max;
-  return Number(next.toPrecision(12));
+export function lengthPresetIndex(value) {
+  const n = clampFloat(value, LIMITS.shortBias.min, LIMITS.shortBias.max, LIMITS.shortBias.fallback);
+  let best = 0;
+  let bestDist = Infinity;
+  LENGTH_PRESETS.forEach((preset, i) => {
+    const dist = Math.abs(Math.log(n) - Math.log(preset.bias));
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  });
+  return best;
+}
+
+export function lengthPresetFor(value) {
+  return LENGTH_PRESETS[lengthPresetIndex(value)];
+}
+
+export function snapShortBias(value) {
+  return lengthPresetFor(value).bias;
+}
+
+export function stepLengthPreset(value, direction) {
+  const next = lengthPresetIndex(value) + direction;
+  const i = Math.min(LENGTH_PRESETS.length - 1, Math.max(0, next));
+  return LENGTH_PRESETS[i].bias;
 }
 
 export function clampSettings({ targetCount, minLen, maxLen, shortBias }) {
-  const { target, length, shortBias: bias } = LIMITS;
+  const { target, length } = LIMITS;
   let minL = clampInt(minLen, length.min, length.max, length.minFallback);
   let maxL = clampInt(maxLen, length.min, length.max, length.maxFallback);
   if (maxL < minL) maxL = minL;
@@ -34,6 +61,6 @@ export function clampSettings({ targetCount, minLen, maxLen, shortBias }) {
     targetCount: clampInt(targetCount, target.min, target.max, target.fallback),
     minLen: minL,
     maxLen: maxL,
-    shortBias: clampFloat(shortBias, bias.min, bias.max, bias.fallback),
+    shortBias: snapShortBias(shortBias),
   };
 }
