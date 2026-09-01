@@ -12,6 +12,7 @@ export const VERDICT = {
   pending: { cls: 'is-pending', title: 'Checking another source...' },
   available: { cls: 'is-available', title: "Looks like it's available" },
   taken: { cls: 'is-taken', title: "We thought it was available, but it wasn't." },
+  placeholder: { cls: 'is-pending is-placeholder', title: 'Looking for the next name...' },
 };
 
 let rdapBases = new Map();
@@ -229,7 +230,7 @@ function dnsIsDelegated(data) {
   return answer.some((rr) => rr.type === DNS_TYPE_NS || rr.type === 5);
 }
 
-async function dnsLooksUndelegated(domain, log, signal) {
+export async function dnsLooksUndelegated(domain, log, signal) {
   const res = await fetchHonoringRateLimit(
     `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`,
     { headers: { Accept: 'application/dns-json' } },
@@ -243,7 +244,7 @@ async function dnsLooksUndelegated(domain, log, signal) {
   return isAuthoritativeNegative(data);
 }
 
-async function rdapIsUnregistered(domain, tld, log, signal) {
+export async function rdapIsUnregistered(domain, tld, log, signal) {
   const res = await fetchHonoringRateLimit(
     rdapLookupUrl(domain, tld),
     { headers: { Accept: 'application/rdap+json' } },

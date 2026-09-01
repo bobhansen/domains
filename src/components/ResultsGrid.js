@@ -6,7 +6,7 @@ export default function ResultsGrid({ results }) {
 
   return html`
     <div className="results-grid">
-      ${results.map((item) => html`<${DomainCard} key=${item.domain} item=${item} />`)}
+      ${results.map((item) => html`<${DomainCard} key=${item.id} item=${item} />`)}
     </div>
   `;
 }

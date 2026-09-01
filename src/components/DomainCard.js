@@ -2,7 +2,7 @@ import { html } from '../html.js';
 import { VERDICT } from '../lib/availability.js';
 
 function VerdictMark({ status }) {
-  if (status === 'pending') {
+  if (status === 'pending' || status === 'placeholder') {
     return html`<span className="verdict-spin" />`;
   }
   return html`
@@ -13,19 +13,28 @@ function VerdictMark({ status }) {
 }
 
 export default function DomainCard({ item }) {
-  const spec = VERDICT[item.status];
+  const spec = VERDICT[item.status] || VERDICT.pending;
+  const phase =
+    item.phase === 'out' ? ' is-leaving'
+    : item.phase === 'in' ? ' is-entering'
+    : item.phase === 'populate' ? ' is-populating'
+    : '';
+  const isPlaceholder = item.status === 'placeholder';
+  const className = `domain-card ${spec.cls}${phase}`;
   return html`
     <a
-      className=${`domain-card ${spec.cls}`}
-      href=${`https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(item.domain)}`}
-      target="_blank"
-      rel="noopener noreferrer"
+      className=${className}
+      href=${isPlaceholder ? undefined : `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(item.domain)}`}
+      target=${isPlaceholder ? undefined : '_blank'}
+      rel=${isPlaceholder ? undefined : 'noopener noreferrer'}
       title=${spec.title}
+      aria-busy=${isPlaceholder || item.status === 'pending'}
+      aria-label=${spec.title}
     >
-      <span className="stem">${item.word}</span>
-      <span className="suffix">.${item.tld}</span>
-      <span className="hint">Namecheap ↗</span>
-      <span className="verdict" aria-label=${spec.title}>
+      ${!isPlaceholder && html`<span className="stem">${item.word}</span>`}
+      ${!isPlaceholder && html`<span className="suffix">.${item.tld}</span>`}
+      ${!isPlaceholder && html`<span className="hint">Namecheap ↗</span>`}
+      <span className="verdict">
         <${VerdictMark} status=${item.status} />
       </span>
     </a>

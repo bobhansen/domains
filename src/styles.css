@@ -393,8 +393,26 @@ button:focus-visible {
   border-radius: 12px;
   text-decoration: none;
   color: var(--paper);
-  animation: fadeIn 0.35s ease both;
-  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease, opacity 0.2s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.domain-card.is-leaving {
+  animation: fadeOut 0.32s ease both;
+  pointer-events: none;
+}
+
+.domain-card.is-entering {
+  animation: fadeIn 0.32s ease both;
+}
+
+.domain-card.is-placeholder {
+  min-height: 5.25rem;
+  pointer-events: none;
+}
+
+.domain-card.is-populating .stem,
+.domain-card.is-populating .suffix {
+  animation: fadeIn 0.2s ease both;
 }
 
 .domain-card.is-taken {
@@ -479,8 +497,25 @@ button:focus-visible {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .domain-card.is-leaving,
+  .domain-card.is-entering,
+  .domain-card.is-populating .stem,
+  .domain-card.is-populating .suffix {
+    animation: none;
+  }
+  .domain-card.is-leaving {
+    opacity: 0;
+  }
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -489,7 +524,8 @@ button:focus-visible {
   .domain-card:hover { transform: translateY(-2px); }
   .domain-card.is-pending:hover { border-color: var(--copper); }
   .domain-card.is-available:hover { border-color: var(--sage); background: var(--sage-dim); }
-  .domain-card.is-taken:hover { border-color: transparent; transform: none; }
+  .domain-card.is-taken:hover,
+  .domain-card.is-placeholder:hover { border-color: transparent; transform: none; }
   .domain-card:hover .hint,
   .domain-card:focus-visible .hint { opacity: 1; }
 }

@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MarkovGenerator } from '../lib/markov.js';
 import { loadValidTlds } from '../lib/tlds.js';
-import { calculateRequiredBatchSize, expectedHitRate } from '../lib/hitRates.js';
+import { expectedHitRate } from '../lib/hitRates.js';
 import { LIMITS, clampFloat, clampInt, clampSettings } from '../lib/limits.js';
 import {
   DNS_CONCURRENCY,
   RDAP_CONCURRENCY,
   abortInFlightRequests,
+  dnsLooksUndelegated,
   initRdapBootstrap,
-  scanNames,
+  rdapIsUnregistered,
   tldHasRdap,
 } from '../lib/availability.js';
-import { isAbortError } from '../lib/pool.js';
+import { isAbortError, sleep } from '../lib/pool.js';
 
 const LOG_CAP = 220;
 let autoStarted = false;
@@ -38,6 +39,7 @@ export function useDomainFinder() {
   const validTldsRef = useRef(new Set());
   const runningRef = useRef(false);
   const abortRef = useRef(null);
+  const runIdRef = useRef(0);
   const logIdRef = useRef(0);
   const logFnRef = useRef(() => {});
   const settingsRef = useRef({});
@@ -76,18 +78,6 @@ export function useDomainFinder() {
     };
   }, []);
 
-  const upsertChit = useCallback((word, tld, statusName) => {
-    const domain = `${word}.${tld}`;
-    setResults((prev) => {
-      const i = prev.findIndex((r) => r.domain === domain);
-      const next = { domain, word, tld, status: statusName };
-      if (i === -1) return [...prev, next];
-      const copy = prev.slice();
-      copy[i] = next;
-      return copy;
-    });
-  }, []);
-
   const runSearch = useCallback(async () => {
     if (runningRef.current || !generatorRef.current) return;
 
@@ -124,10 +114,10 @@ export function useDomainFinder() {
     const useRdap = tldHasRdap(tld);
 
     const abort = new AbortController();
+    const runId = ++runIdRef.current;
     abortRef.current = abort;
     runningRef.current = true;
     setBusy(true);
-    setResults([]);
     setFound(0);
     setChecked(0);
     setStatus(`Searching .${tld} · ${minL}–${maxL} letters`);
@@ -135,9 +125,9 @@ export function useDomainFinder() {
     const priorRate = expectedHitRate(generator, tld, minL, maxL, biasN);
     const allAvailable = [];
     const checkedHistory = new Set();
-    let currentRate = priorRate;
     let totalChecked = 0;
-    let round = 1;
+    let finished = false;
+    const fadeMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 320;
 
     log(`Starting search for ${targetN} .${tld} domains...`);
     log(`Expected hit rate ${(priorRate * 100).toFixed(1)}% from length mix ${minL}–${maxL}.`);
@@ -147,95 +137,254 @@ export function useDomainFinder() {
       log(`No RDAP for .${tld}; treating authoritative DNS NXDOMAIN as available.`);
     }
 
-    const emitStats = (foundCount, checkedCount) => {
-      setFound(foundCount);
-      setChecked(checkedCount);
+    const stillThisRun = () => runIdRef.current === runId;
+
+    const emitStats = () => {
+      if (!stillThisRun()) return;
+      setFound(allAvailable.length);
+      setChecked(totalChecked);
+    };
+
+    const hitTarget = () => allAvailable.length >= targetN;
+
+    const finishIfFull = () => {
+      if (!hitTarget() || finished) return;
+      finished = true;
+      abort.abort();
+      abortInFlightRequests();
+      if (abortRef.current === abort) abortRef.current = null;
+      runningRef.current = false;
+      setBusy(false);
+      hidePlaceholder();
+    };
+
+    let nextSlotId = 0;
+    const makePlaceholder = (phase = 'in') => ({
+      id: nextSlotId,
+      tld,
+      word: '',
+      domain: '',
+      status: 'placeholder',
+      phase,
+    });
+
+    const dropPlaceholder = (rows) => rows.filter((r) => r.status !== 'placeholder');
+    const namedCount = (rows) => dropPlaceholder(rows).length;
+
+    const hidePlaceholder = () => {
+      if (!stillThisRun()) return;
+      setResults((prev) => dropPlaceholder(prev));
+    };
+
+    setResults([makePlaceholder()]);
+
+    const setSlot = (id, patch) => {
+      if (!stillThisRun()) return;
+      setResults((prev) => {
+        const prevRow = prev.find((r) => r.id === id) || {};
+        const fillingPlaceholder = prevRow.status === 'placeholder';
+        const word = patch.word ?? prevRow.word;
+        const row = {
+          ...prevRow,
+          id,
+          tld,
+          ...patch,
+          word,
+          domain: word ? `${word}.${tld}` : '',
+        };
+        const i = prev.findIndex((r) => r.id === id);
+        if (i === -1) {
+          const ph = prev.findIndex((r) => r.status === 'placeholder');
+          const copy = prev.slice();
+          if (ph !== -1) copy[ph] = row;
+          else copy.push(row);
+          if (fillingPlaceholder || ph !== -1) nextSlotId = Math.max(nextSlotId, Number(id) + 1);
+          if (!hitTarget() && namedCount(copy) < targetN) copy.push(makePlaceholder());
+          return copy;
+        }
+        const copy = prev.slice();
+        copy[i] = row;
+        if (fillingPlaceholder) {
+          nextSlotId = Math.max(nextSlotId, Number(id) + 1);
+          if (!hitTarget() && namedCount(copy) < targetN) copy.push(makePlaceholder());
+        }
+        return copy;
+      });
+    };
+
+    const nextCandidate = () => {
+      for (let i = 0; i < 80; i++) {
+        const w = generator.generate(minL, maxL, biasN);
+        if (w && !checkedHistory.has(w)) {
+          checkedHistory.add(w);
+          return w;
+        }
+      }
+      return null;
+    };
+
+    const MAX_HIT_QUEUE = Math.max(4, DNS_CONCURRENCY);
+    const hitQueue = [];
+    const replaceWaiters = [];
+    const appendWaiters = [];
+    let hitsExhausted = false;
+    let wakeHitPump = () => {};
+
+    const takeHit = (kind) => {
+      if (hitQueue.length) {
+        const word = hitQueue.shift();
+        wakeHitPump();
+        return Promise.resolve(word);
+      }
+      if (hitsExhausted || abort.signal.aborted || hitTarget()) return Promise.resolve(null);
+      return new Promise((resolve) => {
+        (kind === 'replace' ? replaceWaiters : appendWaiters).push(resolve);
+        wakeHitPump();
+      });
+    };
+
+    const settleHitWaiters = () => {
+      hitsExhausted = true;
+      for (const resolve of replaceWaiters.splice(0)) resolve(null);
+      for (const resolve of appendWaiters.splice(0)) resolve(null);
+    };
+
+    const offerHit = (word) => {
+      if (abort.signal.aborted || hitTarget()) return;
+      if (replaceWaiters.length) replaceWaiters.shift()(word);
+      else if (appendWaiters.length) appendWaiters.shift()(word);
+      else hitQueue.push(word);
+    };
+
+    const pumpDnsHits = async () => {
+      const inflight = new Set();
+      const launch = (word) => {
+        const task = (async () => {
+          try {
+            const ok = await dnsLooksUndelegated(`${word}.${tld}`, log, abort.signal);
+            totalChecked += 1;
+            emitStats();
+            if (ok) offerHit(word);
+          } catch (e) {
+            if (!isAbortError(e)) {
+              totalChecked += 1;
+              emitStats();
+            }
+          }
+        })().finally(() => inflight.delete(task));
+        inflight.add(task);
+      };
+
+      try {
+        while (!abort.signal.aborted && !hitTarget()) {
+          if (hitQueue.length >= MAX_HIT_QUEUE) {
+            await Promise.race([
+              new Promise((resolve) => {
+                wakeHitPump = resolve;
+              }),
+              sleep(250, abort.signal).catch(() => {}),
+            ]);
+            continue;
+          }
+          const word = nextCandidate();
+          if (!word) {
+            if (inflight.size === 0) break;
+            await Promise.race(inflight);
+            continue;
+          }
+          launch(word);
+          if (inflight.size >= DNS_CONCURRENCY) await Promise.race(inflight);
+        }
+        if (inflight.size) await Promise.allSettled([...inflight]);
+      } catch (e) {
+        if (!isAbortError(e)) throw e;
+      } finally {
+        settleHitWaiters();
+      }
+    };
+
+    const confirmSlot = (id, word) => {
+      if (hitTarget()) return false;
+      allAvailable.push(`${word}.${tld}`);
+      setSlot(id, { word, status: 'available', phase: 'shown' });
+      emitStats();
+      finishIfFull();
+      return true;
+    };
+
+    const runSlot = async (id, firstWord) => {
+      let word = firstWord;
+      let rdapPromise = useRdap
+        ? rdapIsUnregistered(`${word}.${tld}`, tld, log, abort.signal)
+        : Promise.resolve(true);
+      setSlot(id, { word, status: 'pending', phase: 'populate' });
+      if (!useRdap) {
+        confirmSlot(id, word);
+        return;
+      }
+
+      while (!abort.signal.aborted && !hitTarget()) {
+        let available = false;
+        try {
+          available = await rdapPromise;
+        } catch (e) {
+          if (isAbortError(e)) return;
+          log(`RDAP still unresolved for ${word}.${tld}: ${e.message}`, 'error');
+          available = false;
+        }
+        rdapPromise = null;
+        if (abort.signal.aborted || hitTarget()) return;
+        if (available) {
+          confirmSlot(id, word);
+          return;
+        }
+
+        setSlot(id, { word, status: 'taken', phase: 'shown' });
+        const failedWord = word;
+        word = await takeHit('replace');
+        if (!word || abort.signal.aborted || hitTarget()) return;
+        rdapPromise = rdapIsUnregistered(`${word}.${tld}`, tld, log, abort.signal);
+        setSlot(id, { word: failedWord, status: 'taken', phase: 'out' });
+        await sleep(fadeMs, abort.signal).catch(() => {});
+        if (abort.signal.aborted || hitTarget()) return;
+        setSlot(id, { word, status: 'pending', phase: 'in' });
+      }
     };
 
     try {
-      while (allAvailable.length < targetN) {
-        if (abort.signal.aborted) break;
-        let remaining = targetN - allAvailable.length;
-        let queriesNeeded = calculateRequiredBatchSize(remaining, currentRate, 0.95);
-        if (queriesNeeded < 5) queriesNeeded = 5;
-
-        log(`--- Round ${round} ---`);
-        log(`Calculated ${queriesNeeded} queries needed (Rate est: ${(currentRate * 100).toFixed(1)}%)`);
-        setStatus(`Searching .${tld} · round ${round}`);
-
-        const candidates = [];
-        let attempts = 0;
-        while (candidates.length < queriesNeeded && attempts < queriesNeeded * 20) {
-          if (abort.signal.aborted) break;
-          const w = generator.generate(minL, maxL, biasN);
-          if (w && !checkedHistory.has(w) && !candidates.includes(w)) {
-            candidates.push(w);
-          }
-          attempts++;
-        }
-
-        if (abort.signal.aborted) break;
-
-        if (candidates.length === 0) {
-          log('Could not generate enough unique candidates matching constraints.', 'error');
-          break;
-        }
-
-        candidates.forEach((c) => checkedHistory.add(c));
-        log(
-          useRdap
-            ? `Checking ${candidates.length} names: DNS×${DNS_CONCURRENCY} pipelined into RDAP×${RDAP_CONCURRENCY}...`
-            : `Checking ${candidates.length} names against Cloudflare DoH...`,
-        );
-
-        const roundAvailable = [];
-        await scanNames(candidates, tld, {
-          signal: abort.signal,
-          log: (msg, type) => log(msg, type),
-          onDnsHit(word) {
-            if (abort.signal.aborted) return;
-            upsertChit(word, tld, useRdap ? 'pending' : 'available');
-            if (!useRdap) {
-              roundAvailable.push(`${word}.${tld}`);
-              allAvailable.push(`${word}.${tld}`);
-            }
-            emitStats(allAvailable.length, totalChecked + candidates.length);
-          },
-          onRdap(word, ok) {
-            if (abort.signal.aborted) return;
-            upsertChit(word, tld, ok ? 'available' : 'taken');
-            if (ok) {
-              roundAvailable.push(`${word}.${tld}`);
-              allAvailable.push(`${word}.${tld}`);
-            }
-            emitStats(allAvailable.length, totalChecked + candidates.length);
-          },
-        });
-
-        totalChecked += candidates.length;
-        emitStats(allAvailable.length, totalChecked);
-
-        if (roundAvailable.length > 0) {
-          log(`Found ${roundAvailable.length} this round!`, 'success');
-        } else {
-          log('None found this round.');
-        }
-
-        if (totalChecked > 0) {
-          currentRate = Math.max(0.01, allAvailable.length / totalChecked);
-        }
-        round++;
+      log(
+        useRdap
+          ? `Filling ${targetN} names: DNS×${DNS_CONCURRENCY} pipelined into RDAP×${RDAP_CONCURRENCY}...`
+          : `Filling ${targetN} names against Cloudflare DoH...`,
+      );
+      const pumping = pumpDnsHits();
+      const workers = [];
+      for (let id = 0; id < targetN; id++) {
+        if (abort.signal.aborted || hitTarget()) break;
+        const word = await takeHit('append');
+        if (!word) break;
+        workers.push(runSlot(id, word));
       }
-
-      if (abort.signal.aborted) {
+      await Promise.all(workers);
+      await pumping.catch(() => {});
+      if (!stillThisRun()) return;
+      if (finished || hitTarget()) {
+        setResults((prev) => prev.filter((r) => r.status === 'available').slice(0, targetN));
+        log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
+        setStatus(`Done · ${allAvailable.length} of ${targetN} · ${totalChecked} checked`);
+      } else if (abort.signal.aborted) {
         log('Search cancelled.');
         setStatus('Cancelled — change settings and start again.');
       } else {
-        setStatus(`Done · ${allAvailable.length} of ${targetN} · ${totalChecked} checked`);
-        log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
+        log('Could not generate enough unique candidates matching constraints.', 'error');
+        setStatus('Search stopped.');
       }
     } catch (e) {
-      if (isAbortError(e) || abort.signal.aborted) {
+      if (!stillThisRun()) return;
+      if (finished || hitTarget()) {
+        setResults((prev) => prev.filter((r) => r.status === 'available').slice(0, targetN));
+        log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
+      } else if (isAbortError(e) || abort.signal.aborted) {
         log('Search cancelled.');
         setStatus('Cancelled — change settings and start again.');
       } else {
@@ -243,11 +392,13 @@ export function useDomainFinder() {
         setStatus('Search stopped on an error.');
       }
     } finally {
+      if (!stillThisRun()) return;
       if (abortRef.current === abort) abortRef.current = null;
       runningRef.current = false;
       setBusy(false);
+      hidePlaceholder();
     }
-  }, [log, upsertChit]);
+  }, [log]);
 
   const cancelSearch = useCallback(() => {
     if (!runningRef.current) return;
