@@ -46,7 +46,7 @@ export default function App() {
       <div className=${classes}>
         <header className="mobile-bar">
           <div className="mobile-brand">
-            <h1>Domain Spring</h1>
+            <h1>Vanity Domains</h1>
           </div>
         </header>
 
@@ -68,8 +68,8 @@ export default function App() {
             </button>
           </div>
           <header className="brand">
-            <h1>Domain Spring</h1>
-            <p className="lede">Bubbling up open domain names that are easy to say, remember, and type.</p>
+            <h1>Vanity Domains</h1>
+            <p className="lede">Discover your own domain that is easy to say, remember, and type.</p>
           </header>
 
           <${Controls}
