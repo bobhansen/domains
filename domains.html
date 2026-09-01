@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find My Domain</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --danger: #ef4444;
+            --border: #334155;
+            --font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            line-height: 1.5;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+
+        h1 { margin-top: 0; font-size: 1.5rem; color: #fff; }
+        
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        input, select {
+            width: 100%;
+            padding: 0.5rem;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover:not(:disabled) { background: var(--primary-hover); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .log-window {
+            background: #020617;
+            border-radius: 6px;
+            padding: 1rem;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .log-entry { margin-bottom: 4px; }
+        .log-success { color: var(--success); }
+        .log-error { color: var(--danger); }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+
+        .domain-card {
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--success);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-in;
+            text-decoration: none;
+        }
+
+        a.domain-card:hover {
+            border-color: var(--success);
+            color: #34d399;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #custom-tld-container { display: none; }
+        .loader {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Settings Panel -->
+    <div class="panel h-fit">
+        <h1>Domain Generator</h1>
+        
+        <label>TLD</label>
+        <select id="tld-select">
+            <option value="com">.com</option>
+            <option value="org" selected>.org</option>
+            <option value="net">.net</option>
+            <option value="me">.me</option>
+            <option value="io">.io</option>
+            <option value="co">.co</option>
+            <option value="ai">.ai</option>
+            <option value="app">.app</option>
+            <option value="custom">Custom...</option>
+        </select>
+
+        <div id="custom-tld-container">
+            <label>Custom TLD (no dot)</label>
+            <input type="text" id="tld-custom" placeholder="e.g. tech">
+        </div>
+
+        <label>Target Available Count</label>
+        <input type="number" id="batch-size" value="20" min="1" max="100">
+
+        <label>Min Length</label>
+        <input type="number" id="min-len" value="4" min="2" max="20">
+
+        <label>Max Length</label>
+        <input type="number" id="max-len" value="8" min="2" max="20">
+
+        <label>Short Bias Multiplier</label>
+        <input type="number" id="short-bias" value="10" step="0.1" min="0.1">
+
+        <button id="start-btn">Start Generating</button>
+    </div>
+
+    <!-- Main View -->
+    <div class="panel">
+        <div class="log-window" id="log-window">
+            <div class="log-entry">Initializing system...</div>
+        </div>
+        
+        <h2 style="margin-top: 0; font-size: 1.25rem;">Available Domains <span id="found-count">(0)</span></h2>
+        <div class="results-grid" id="results-grid">
+            <!-- Results populated here -->
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 1. IndexedDB Wrapper for caching ---
+    const DB_NAME = 'DomainGenDB';
+    const STORE_NAME = 'cacheStore';
+
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = (e) => {
+                req.result.createObjectStore(STORE_NAME);
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function getCache(key) {
+        const db = await openDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const req = tx.objectStore(STORE_NAME).get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+        });
+    }
+
+    async function setCache(key, value) {
+        const db = await openDB();
+        return new Promise((resolve) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).put(value, key);
+            tx.oncomplete = () => resolve();
+        });
+    }
+
+    // --- 2. Logging UI ---
+    const logWindow = document.getElementById('log-window');
+    function log(msg, type = 'normal') {
+        const div = document.createElement('div');
+        div.className = `log-entry ${type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : ''}`;
+        div.innerText = msg;
+        logWindow.appendChild(div);
+        logWindow.scrollTop = logWindow.scrollHeight;
+    }
+
+    // --- 3. Async Task Pool ---
+    async function asyncPool(poolLimit, array, iteratorFn) {
+        const ret = [];
+        const executing = [];
+        for (const item of array) {
+            const p = Promise.resolve().then(() => iteratorFn(item));
+            ret.push(p);
+            if (poolLimit <= array.length) {
+                const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+                executing.push(e);
+                if (executing.length >= poolLimit) {
+                    await Promise.race(executing);
+                }
+            }
+        }
+        return Promise.all(ret);
+    }
+
+    // --- 4. Math / Binomial logic ---
+    function comb(n, k) {
+        if (k < 0 || k > n) return 0;
+        if (k === 0 || k === n) return 1;
+        k = Math.min(k, n - k);
+        let c = 1;
+        for (let i = 0; i < k; i++) c = c * (n - i) / (i + 1);
+        return c;
+    }
+
+    function calculateRequiredBatchSize(k, p, confidence = 0.95) {
+        if (p <= 0 || p >= 1) return k;
+        let n = Math.floor(k / p);
+        while (true) {
+            let probLessThanK = 0;
+            for (let i = 0; i < k; i++) {
+                probLessThanK += comb(n, i) * Math.pow(p, i) * Math.pow(1 - p, n - i);
+            }
+            if (1.0 - probLessThanK >= confidence) return n;
+            n++;
+        }
+    }
+
+    // --- 5. Valid IANA TLDs ---
+    let validTLDs = new Set();
+    async function initTLDs() {
+        const cacheKey = 'iana_tlds_v1';
+        let cached = await getCache(cacheKey);
+        if (cached) {
+            validTLDs = new Set(cached);
+            return;
+        }
+        log("Fetching canonical IANA TLD list...");
+        try {
+            const res = await fetch('https://data.iana.org/TLD/tlds-alpha-by-domain.txt');
+            const text = await res.text();
+            const tlds = text.split('\n')
+                .filter(l => l && !l.startsWith('#'))
+                .map(l => l.trim().toLowerCase());
+            validTLDs = new Set(tlds);
+            await setCache(cacheKey, tlds);
+            log(`Loaded ${tlds.length} top-level domains.`, 'success');
+        } catch (e) {
+            log("Failed to fetch IANA TLDs, relying on basic validation.", "error");
+        }
+    }
+
+    // --- 6. Markov Generator Engine ---
+    class MarkovGenerator {
+        constructor(nGram = 3) {
+            this.nGram = nGram;
+            this.transitions = {};
+            this.starts = [];
+            this.knownWords = new Set();
+        }
+
+        async init() {
+            const cacheKey = `markov_model_n${this.nGram}_v1`;
+            let cached = await getCache(cacheKey);
+            if (cached) {
+                this.transitions = cached.transitions;
+                this.starts = cached.starts;
+                this.knownWords = new Set(cached.knownWords);
+                log("Markov model loaded from local browser cache.", "success");
+                return;
+            }
+
+            log("Downloading 10k English word list for training...");
+            let words = [];
+            try {
+                const res = await fetch('https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-no-swears.txt');
+                const text = await res.text();
+                words = text.split('\n').map(w => w.trim().toLowerCase()).filter(w => w && /^[a-z]+$/.test(w));
+            } catch(e) {
+                log("Fetch failed. Using hardcoded fallback words.", "error");
+                words = ["action", "animal", "beauty", "camera", "danger", "energy", "family", "garden", "health", "jungle", "living", "memory", "nature", "orange", "picture", "reason", "secret", "travel", "window"];
+            }
+
+            log(`Training generator on ${words.length} words...`);
+            this.knownWords = new Set(words);
+
+            for (let word of words) {
+                if (word.length <= this.nGram) continue;
+                this.starts.push(word.slice(0, this.nGram));
+                for (let i = 0; i < word.length - this.nGram; i++) {
+                    let state = word.slice(i, i + this.nGram);
+                    let nextChar = word[i + this.nGram];
+                    if (!this.transitions[state]) this.transitions[state] = [];
+                    this.transitions[state].push(nextChar);
+                }
+                let endState = word.slice(-this.nGram);
+                if (!this.transitions[endState]) this.transitions[endState] = [];
+                this.transitions[endState].push(null);
+            }
+
+            await setCache(cacheKey, {
+                transitions: this.transitions,
+                starts: this.starts,
+                knownWords: Array.from(this.knownWords)
+            });
+            log("Training complete and cached.", "success");
+        }
+
+        generate(minLen, maxLen, shortBias) {
+            for (let attempt = 0; attempt < 100; attempt++) {
+                let word = this.starts[Math.floor(Math.random() * this.starts.length)];
+                
+                while (word.length < 50) {
+                    let state = word.slice(-this.nGram);
+                    let choices = this.transitions[state];
+                    
+                    if (!choices || choices.length === 0) break;
+
+                    let nextChar;
+                    if (shortBias !== 1.0 && choices.includes(null)) {
+                        // Weighted random
+                        let counts = new Map();
+                        for (let c of choices) counts.set(c, (counts.get(c) || 0) + 1);
+                        
+                        let population = Array.from(counts.keys());
+                        let weights = population.map(c => c === null ? counts.get(c) * shortBias : counts.get(c));
+                        let totalWeight = weights.reduce((a, b) => a + b, 0);
+                        
+                        let r = Math.random() * totalWeight;
+                        for (let i = 0; i < population.length; i++) {
+                            r -= weights[i];
+                            if (r <= 0) {
+                                nextChar = population[i];
+                                break;
+                            }
+                        }
+                    } else {
+                        nextChar = choices[Math.floor(Math.random() * choices.length)];
+                    }
+
+                    if (nextChar === null) break;
+                    word += nextChar;
+                }
+
+                if (word.length >= minLen && word.length <= maxLen && !this.knownWords.has(word)) {
+                    return word;
+                }
+            }
+            return null;
+        }
+    }
+
+    // --- 7. Domain Checking via Cloudflare DoH ---
+    // Cloudflare JSON DoH (Google schema): Status is the DNS RCODE.
+    //   0 NOERROR, 2 SERVFAIL, 3 NXDOMAIN. See:
+    //   https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/dns-json/
+    // SERVFAIL (status 2) often means "no reachable authority" — the name can
+    // still be registered. Only an RFC 2308 negative from an authority (NXDOMAIN
+    // plus SOA in Authority) is treated as free.
+    const DNS_RCODE_NXDOMAIN = 3;
+    const DNS_TYPE_SOA = 6;
+
+    function isAuthoritativeNegative(data) {
+        if (!data || data.Status !== DNS_RCODE_NXDOMAIN) return false;
+        const authority = data.Authority || [];
+        return authority.some(rr => rr.type === DNS_TYPE_SOA);
+    }
+
+    async function checkDomainAvailability(domain) {
+        try {
+            const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`, {
+                headers: { 'Accept': 'application/dns-json' }
+            });
+            if (!res.ok) return false;
+            const data = await res.json();
+            return isAuthoritativeNegative(data);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // --- 8. UI Logic and Main Loop ---
+    const generator = new MarkovGenerator();
+    let isRunning = false;
+
+    // DOM Elements
+    const tldSelect = document.getElementById('tld-select');
+    const customTldContainer = document.getElementById('custom-tld-container');
+    const tldCustom = document.getElementById('tld-custom');
+    const btnStart = document.getElementById('start-btn');
+    const resultsGrid = document.getElementById('results-grid');
+    const foundCountEl = document.getElementById('found-count');
+
+    tldSelect.addEventListener('change', (e) => {
+        customTldContainer.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    });
+
+    async function bootstrap() {
+        btnStart.disabled = true;
+        btnStart.innerHTML = '<div class="loader"></div> Loading...';
+        await initTLDs();
+        await generator.init();
+        btnStart.disabled = false;
+        btnStart.innerText = 'Start Generating';
+        
+        // Auto-start on load as requested
+        runMainLoop(); 
+    }
+
+    async function runMainLoop() {
+        if (isRunning) return;
+        
+        let tld = tldSelect.value === 'custom' ? tldCustom.value.trim().toLowerCase() : tldSelect.value;
+        tld = tld.replace(/^\./, ''); // remove leading dot if user typed it
+        
+        if (!tld) {
+            log("Please enter a custom TLD.", "error");
+            return;
+        }
+
+        if (validTLDs.size > 0 && !validTLDs.has(tld)) {
+            log(`Warning: ".${tld}" does not appear to be a valid IANA TLD.`, "error");
+            return;
+        }
+
+        const targetCount = parseInt(document.getElementById('batch-size').value, 10) || 20;
+        const minLen = parseInt(document.getElementById('min-len').value, 10) || 4;
+        const maxLen = parseInt(document.getElementById('max-len').value, 10) || 8;
+        const shortBias = parseFloat(document.getElementById('short-bias').value) || 1.0;
+
+        isRunning = true;
+        btnStart.disabled = true;
+        btnStart.innerHTML = '<div class="loader"></div> Searching...';
+        resultsGrid.innerHTML = ''; // Clear previous results
+        foundCountEl.innerText = '(0)';
+        
+        let allAvailable = [];
+        let checkedHistory = new Set();
+        let currentRate = 0.20; // Assume 20% available to start
+        let totalChecked = 0;
+        let round = 1;
+
+        log(`Starting search for ${targetCount} .${tld} domains...`);
+
+        try {
+            while (allAvailable.length < targetCount) {
+                let remaining = targetCount - allAvailable.length;
+                let queriesNeeded = calculateRequiredBatchSize(remaining, currentRate, 0.95);
+                
+                // Cap queries per round to avoid overloading the browser network queue
+                if (queriesNeeded > 150) queriesNeeded = 150; 
+                if (queriesNeeded < 5) queriesNeeded = 5;
+
+                log(`--- Round ${round} ---`);
+                log(`Calculated ${queriesNeeded} queries needed (Rate est: ${(currentRate*100).toFixed(1)}%)`);
+
+                let candidates = [];
+                let attempts = 0;
+                while (candidates.length < queriesNeeded && attempts < queriesNeeded * 20) {
+                    let w = generator.generate(minLen, maxLen, shortBias);
+                    if (w && !checkedHistory.has(w) && !candidates.includes(w)) {
+                        candidates.push(w);
+                    }
+                    attempts++;
+                }
+
+                if (candidates.length === 0) {
+                    log("Could not generate enough unique candidates matching constraints.", "error");
+                    break;
+                }
+
+                candidates.forEach(c => checkedHistory.add(c));
+                
+                log(`Checking ${candidates.length} domains against Cloudflare DoH...`);
+
+                // Concurrent checking (limit 15 at a time)
+                let results = await asyncPool(15, candidates, async (word) => {
+                    let isAvail = await checkDomainAvailability(`${word}.${tld}`);
+                    return { word, isAvail };
+                });
+
+                let roundAvailable = results.filter(r => r.isAvail).map(r => `${r.word}.${tld}`);
+                allAvailable.push(...roundAvailable);
+                totalChecked += candidates.length;
+
+                if (roundAvailable.length > 0) {
+                    log(`Found ${roundAvailable.length} this round!`, 'success');
+                    roundAvailable.forEach(dom => {
+                        let a = document.createElement('a');
+                        a.className = 'domain-card';
+                        a.href = `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(dom)}`;
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
+                        a.innerText = dom;
+                        resultsGrid.appendChild(a);
+                    });
+                    foundCountEl.innerText = `(${allAvailable.length})`;
+                } else {
+                    log("None found this round.");
+                }
+
+                // Update real-world rate
+                if (totalChecked > 0) {
+                    currentRate = Math.max(0.01, allAvailable.length / totalChecked);
+                }
+                
+                round++;
+            }
+            
+            log(`Done! Checked ${totalChecked} domains. Found ${allAvailable.length}.`, 'success');
+
+        } catch (e) {
+            log(`Error during search: ${e.message}`, 'error');
+        } finally {
+            isRunning = false;
+            btnStart.disabled = false;
+            btnStart.innerText = 'Start Generating';
+        }
+    }
+
+    btnStart.addEventListener('click', runMainLoop);
+
+    // Boot up
+    window.onload = bootstrap;
+
+</script>
+</body>
+</html>
