@@ -137,9 +137,9 @@ export default function Controls({
         <p className="hint">Higher values prefer shorter invented words.</p>
       </div>
 
-      <button className="start-btn" type="button" disabled=${!ready || busy} onClick=${onStart}>
-        ${(busy || !ready) && html`<span className="loader" aria-hidden="true" />`}
-        ${!ready ? 'Loading…' : busy ? 'Searching…' : 'Start generating'}
+      <button className=${`start-btn${busy ? ' is-stop' : ''}`} type="button" disabled=${!ready} onClick=${onStart}>
+        ${!ready && html`<span className="loader" aria-hidden="true" />`}
+        ${!ready ? 'Loading…' : busy ? 'Stop searching' : 'Start generating'}
       </button>
     </form>
   `;

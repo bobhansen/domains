@@ -166,12 +166,15 @@ export function useDomainFinder() {
         const candidates = [];
         let attempts = 0;
         while (candidates.length < queriesNeeded && attempts < queriesNeeded * 20) {
+          if (abort.signal.aborted) break;
           const w = generator.generate(minL, maxL, biasN);
           if (w && !checkedHistory.has(w) && !candidates.includes(w)) {
             candidates.push(w);
           }
           attempts++;
         }
+
+        if (abort.signal.aborted) break;
 
         if (candidates.length === 0) {
           log('Could not generate enough unique candidates matching constraints.', 'error');
@@ -245,6 +248,12 @@ export function useDomainFinder() {
       setBusy(false);
     }
   }, [log, upsertChit]);
+
+  const cancelSearch = useCallback(() => {
+    if (!runningRef.current) return;
+    abortRef.current?.abort();
+    abortInFlightRequests();
+  }, []);
 
   useEffect(() => {
     if (!ready || autoStarted) return;

@@ -27,6 +27,10 @@ export default function App() {
   }, [sheetOpen]);
 
   function startSearch() {
+    if (finder.busy) {
+      finder.cancelSearch();
+      return;
+    }
     setSheetOpen(false);
     finder.runSearch();
   }

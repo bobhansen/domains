@@ -262,7 +262,7 @@ button:focus-visible {
   padding: 0.8rem 1rem;
   background: var(--paper);
   color: var(--ink);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 10px;
   font: 600 0.95rem/1 var(--sans);
   letter-spacing: 0.01em;
@@ -276,6 +276,17 @@ button:focus-visible {
 }
 
 .start-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+.start-btn.is-stop {
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--danger);
+}
+
+.start-btn.is-stop:hover:not(:disabled) {
+  background: rgba(224, 122, 106, 0.14);
+  transform: none;
+}
 
 .log-panel {
   flex: 1;
