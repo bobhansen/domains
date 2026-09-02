@@ -44,7 +44,7 @@ export default function About({ tagline }) {
         <p/>
         <h4>Some technical bits</h4>
         <p>To find a good vanity domain, we want it to be easy to say, remember, and type.</p>
-        <p>To do that, we analyze the 10,000 most common English words and build a Markov trigram model from them.</p>
+        <p>To do that, we analyze the most common words in a language you choose and build a Markov trigram model from them.</p>
         <p>We then generate random names by sampling the markov model, check them against Cloudflare DoH, and then against the registry RDAP if the TLD supports it.</p>
         <p>The links go to namecheap because they've been a good host for me for a long time.</p>
         <button type="button" className="about-dialog-close" onClick=${() => setOpen(false)}>

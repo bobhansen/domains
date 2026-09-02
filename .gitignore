@@ -2,3 +2,13 @@ node_modules
 dist
 .vite
 *.local
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+.pytest_cache/

@@ -1,9 +1,12 @@
 import { html } from '../html.js';
 import { TLD_CHIPS } from '../hooks/useDomainFinder.js';
 import { LIMITS, LENGTH_PRESETS, lengthPresetIndex, stepLengthPreset } from '../lib/limits.js';
+import LanguageSelect from './LanguageSelect.js';
 
 export default function Controls({
   compact,
+  language,
+  onLanguageChange,
   tldChoice,
   onTldChange,
   customTld,
@@ -57,6 +60,8 @@ export default function Controls({
         `}
       </fieldset>
       `}
+
+      <${LanguageSelect} value=${language} onChange=${onLanguageChange} />
 
       <div className="pair">
         <div>

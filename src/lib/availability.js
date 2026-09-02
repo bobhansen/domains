@@ -213,10 +213,19 @@ export function tldHasRdap(tld) {
   return !!rdapBaseFor(tld);
 }
 
+export function asciiDomain(domain) {
+  try {
+    return new URL(`https://${domain}`).hostname;
+  } catch {
+    return String(domain || '').toLowerCase();
+  }
+}
+
 function rdapLookupUrl(domain, tld) {
+  const host = asciiDomain(domain);
   const base = rdapBaseFor(tld);
-  if (base) return `${base}domain/${encodeURIComponent(domain)}`;
-  return `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+  if (base) return `${base}domain/${encodeURIComponent(host)}`;
+  return `https://rdap.org/domain/${encodeURIComponent(host)}`;
 }
 
 function isAuthoritativeNegative(data) {
@@ -232,7 +241,7 @@ function dnsIsDelegated(data) {
 
 export async function dnsLooksUndelegated(domain, log, signal) {
   const res = await fetchHonoringRateLimit(
-    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`,
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(asciiDomain(domain))}&type=NS`,
     { headers: { Accept: 'application/dns-json' } },
     DNS_CONCURRENCY,
     log,

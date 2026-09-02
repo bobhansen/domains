@@ -104,6 +104,8 @@ export default function App() {
 
           <${Controls}
             compact=${compact}
+            language=${finder.language}
+            onLanguageChange=${finder.setLanguage}
             tldChoice=${finder.tldChoice}
             onTldChange=${finder.setTldChoice}
             customTld=${finder.customTld}

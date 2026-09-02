@@ -5,6 +5,12 @@ import { expectedHitRate } from '../lib/hitRates.js';
 import { LIMITS, clampInt, clampSettings, snapShortBias } from '../lib/limits.js';
 import { resolvedTld, validateTld } from '../lib/tld.js';
 import {
+  isKnownLanguage,
+  languageByCode,
+  readStoredLanguage,
+  storeLanguage,
+} from '../lib/languages.js';
+import {
   DNS_CONCURRENCY,
   RDAP_CONCURRENCY,
   abortInFlightRequests,
@@ -21,7 +27,6 @@ const CUSTOM_TLD_DEBOUNCE_MS = 400;
 export const TLD_CHIPS = ['com', 'org', 'net', 'me', 'io', 'co', 'ai', 'app', 'custom'];
 
 export function useDomainFinder() {
-  const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('Loading word model…');
   const [logs, setLogs] = useState([{ id: 0, msg: 'Initializing system...', type: 'normal' }]);
@@ -30,6 +35,9 @@ export function useDomainFinder() {
   const [checked, setChecked] = useState(0);
   const [capacity, setCapacityState] = useState(0);
 
+  const [language, setLanguageState] = useState(readStoredLanguage);
+  const [modelLang, setModelLang] = useState(null);
+  const [bootReady, setBootReady] = useState(false);
   const [tldChoice, setTldChoice] = useState('org');
   const [customTld, setCustomTld] = useState('');
   const [minLen, setMinLen] = useState(LIMITS.length.minFallback);
@@ -60,7 +68,8 @@ export function useDomainFinder() {
   }, []);
 
   logFnRef.current = log;
-  settingsRef.current = { tldChoice, customTld, minLen, maxLen, shortBias };
+  settingsRef.current = { tldChoice, customTld, minLen, maxLen, shortBias, language };
+  const ready = bootReady && modelLang === language;
 
   const setCapacity = useCallback((n) => {
     const cap = Math.max(0, Math.min(LIMITS.target.max, Math.round(Number(n) || 0)));
@@ -78,10 +87,8 @@ export function useDomainFinder() {
       try {
         validTldsRef.current = await loadValidTlds((msg, type) => logFnRef.current(msg, type));
         await initRdapBootstrap((msg, type) => logFnRef.current(msg, type));
-        await generator.init((msg, type) => logFnRef.current(msg, type));
         if (cancelled) return;
-        setReady(true);
-        setStatus('Ready — searching automatically.');
+        setBootReady(true);
       } catch (e) {
         if (!cancelled) setStatus(`Startup failed: ${e.message}`);
       }
@@ -105,9 +112,35 @@ export function useDomainFinder() {
     abortRef.current = null;
   }, [abortCurrent]);
 
+  useEffect(() => {
+    if (!bootReady || !generatorRef.current) return undefined;
+    let cancelled = false;
+    const spec = languageByCode(language);
+    setModelLang(null);
+    setStatus(`Loading ${spec.name}…`);
+    preemptRun();
+    setBusy(false);
+
+    (async () => {
+      try {
+        await generatorRef.current.load(spec.code, (msg, type) => logFnRef.current(msg, type));
+        if (cancelled) return;
+        setModelLang(spec.code);
+        setStatus('Ready — searching automatically.');
+      } catch (e) {
+        if (!cancelled) setStatus(`Could not load ${spec.name}: ${e.message}`);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootReady, language, preemptRun]);
+
   const runSearch = useCallback(async (opts = {}) => {
     const reset = opts.reset !== false;
-    if (!generatorRef.current) return;
+    const generator = generatorRef.current;
+    if (!generator || generator.lang !== settingsRef.current.language) return;
     if (capacityRef.current < 1) return;
 
     const {
@@ -143,7 +176,6 @@ export function useDomainFinder() {
       maxLen: maxL,
       shortBias: biasN,
     } = clampSettings({ minLen: min, maxLen: max, shortBias: bias });
-    const generator = generatorRef.current;
     const useRdap = tldHasRdap(tld);
     const checkedHistory = checkedHistoryRef.current;
 
@@ -491,7 +523,7 @@ export function useDomainFinder() {
 
     runSearch({ reset: true });
     return undefined;
-  }, [ready, layoutReady, tldChoice, customTld, minLen, maxLen, shortBias, runSearch, preemptRun]);
+  }, [ready, layoutReady, tldChoice, customTld, minLen, maxLen, shortBias, language, runSearch, preemptRun]);
 
   useEffect(() => {
     if (!ready || !layoutReady) return undefined;
@@ -533,6 +565,12 @@ export function useDomainFinder() {
     setShortBias(snapShortBias(raw));
   }
 
+  function setLanguage(code) {
+    if (!isKnownLanguage(code) || code === language) return;
+    storeLanguage(code);
+    setLanguageState(code);
+  }
+
   const validateCustomTld = useCallback((raw) => validateTld(raw, validTldsRef.current), []);
 
   return {
@@ -549,6 +587,8 @@ export function useDomainFinder() {
     setTldChoice,
     customTld,
     setCustomTld,
+    language,
+    setLanguage,
     minLen,
     setMinLen: commitMinLen,
     maxLen,

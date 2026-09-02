@@ -207,6 +207,78 @@ legend, label {
 
 .custom-tld { margin-top: 0.7rem; }
 
+.lang-combo {
+  position: relative;
+}
+
+.lang-combo input {
+  padding-right: 2rem;
+  font-family: var(--sans);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.95rem) calc(50% - 0.12rem),
+    calc(100% - 0.65rem) calc(50% - 0.12rem);
+  background-size: 0.32rem 0.32rem, 0.32rem 0.32rem;
+  background-repeat: no-repeat;
+}
+
+.lang-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0.25rem;
+  max-height: 12.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.lang-list li { margin: 0; }
+
+.lang-list button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--paper);
+  font: 500 0.9375rem/1.3 var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lang-list button:hover,
+.lang-list button.is-active {
+  background: var(--raised);
+}
+
+.lang-list button.is-current .lang-name {
+  color: var(--copper-bright);
+}
+
+.lang-code {
+  flex: 0 0 auto;
+  font: 500 0.72rem/1.2 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: none;
+}
+
+.lang-empty {
+  padding: 0.55rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 .pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -232,6 +304,11 @@ button:focus-visible {
   outline: none;
   border-color: var(--copper);
   box-shadow: 0 0 0 3px var(--focus);
+}
+
+.lang-combo input[type="text"] {
+  padding-right: 2rem;
+  font-family: var(--sans);
 }
 
 .length-stepper {

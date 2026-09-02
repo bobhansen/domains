@@ -24,9 +24,10 @@ export async function getCache(key) {
 
 export async function setCache(key, value) {
   const db = await openDB();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(value, key);
     tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }

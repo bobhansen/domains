@@ -1,3 +1,5 @@
+import { graphemeCount } from './markov.js';
+
 // Mean P(listed as available) for Markov-generated labels.
 // DNS NXDOMAIN+SOA, then RDAP 404 when the TLD is in IANA's bootstrap.
 // Built by measure_hit_rates.py at 2026-09-01T19:13:45Z.
@@ -49,7 +51,7 @@ export function expectedHitRate(generator, tld, minLen, maxLen, shortBias) {
   for (let i = 0; i < 500; i++) {
     const w = generator.generate(minLen, maxLen, shortBias);
     if (!w) continue;
-    const p = lookupHitRate(tld, w.length);
+    const p = lookupHitRate(tld, graphemeCount(w, generator.locale));
     if (p != null) acc.push(p);
   }
   if (acc.length) {
