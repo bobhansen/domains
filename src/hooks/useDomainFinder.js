@@ -240,6 +240,17 @@ export function useDomainFinder() {
       setResults((prev) => prev.filter((r) => r.status !== 'placeholder'));
     };
 
+    const stoppedByUser = () => abort.signal.aborted && !finished && !hitTarget();
+
+    const settleGrid = () => {
+      if (!stillThisRun()) return;
+      if (stoppedByUser()) {
+        hidePlaceholder();
+        return;
+      }
+      setResults((prev) => prev.filter((r) => r.status === 'available'));
+    };
+
     const finishIfFull = () => {
       if (!hitTarget() || finished) return;
       finished = true;
@@ -485,7 +496,7 @@ export function useDomainFinder() {
       await Promise.all(workers);
       await pumping.catch(() => {});
       if (!stillThisRun()) return;
-      setResults((prev) => prev.filter((r) => r.status === 'available'));
+      settleGrid();
       if (finished || hitTarget()) {
         const n = foundRef.current.length;
         log(`Search complete. Checked ${totalChecked} domains and found ${n}.`, 'success');
@@ -499,7 +510,7 @@ export function useDomainFinder() {
       }
     } catch (e) {
       if (!stillThisRun()) return;
-      setResults((prev) => prev.filter((r) => r.status === 'available'));
+      settleGrid();
       if (finished || hitTarget()) {
         log(
           `Search complete. Checked ${totalChecked} domains and found ${foundRef.current.length}.`,
