@@ -50,6 +50,13 @@ export const DEFAULT_LANGUAGE = 'en';
 
 const byCode = new Map(LANGUAGES.map((lang) => [lang.code, lang]));
 
+const LANGUAGE_ALIASES = {
+  nb: 'no',
+  nn: 'no',
+  fil: 'tl',
+  in: 'id',
+};
+
 export function isKnownLanguage(code) {
   return byCode.has(code);
 }
@@ -61,6 +68,49 @@ export function languageByCode(code) {
 export function localeForLanguage(code) {
   if (code === 'pt_br') return 'pt-BR';
   return code || 'en';
+}
+
+function matchLanguage(tag) {
+  const bcp = String(tag || '').trim().replace(/_/g, '-').toLowerCase();
+  if (!bcp) return null;
+  const parts = bcp.split('-').filter(Boolean);
+  for (let n = parts.length; n >= 1; n--) {
+    const code = parts.slice(0, n).join('_');
+    if (isKnownLanguage(code)) return code;
+    const alias = LANGUAGE_ALIASES[code];
+    if (alias && isKnownLanguage(alias)) return alias;
+  }
+  return null;
+}
+
+function browserLanguageTags() {
+  const tags = [];
+  try {
+    if (typeof navigator !== 'undefined') {
+      if (Array.isArray(navigator.languages)) tags.push(...navigator.languages);
+      if (navigator.language) tags.push(navigator.language);
+      if (navigator.userLanguage) tags.push(navigator.userLanguage);
+      if (navigator.browserLanguage) tags.push(navigator.browserLanguage);
+      if (navigator.systemLanguage) tags.push(navigator.systemLanguage);
+    }
+  } catch {
+    /* navigator can throw in odd embeddings */
+  }
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    if (locale) tags.push(locale);
+  } catch {
+    /* Intl missing */
+  }
+  return tags;
+}
+
+export function languageFromBrowser() {
+  for (const tag of browserLanguageTags()) {
+    const code = matchLanguage(tag);
+    if (code) return code;
+  }
+  return DEFAULT_LANGUAGE;
 }
 
 function fold(value) {

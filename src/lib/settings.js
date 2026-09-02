@@ -1,4 +1,4 @@
-import { DEFAULT_LANGUAGE, isKnownLanguage } from './languages.js';
+import { DEFAULT_LANGUAGE, isKnownLanguage, languageFromBrowser } from './languages.js';
 import { LIMITS, clampSettings } from './limits.js';
 import { TLD_CHIPS, validateTld } from './tld.js';
 
@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 export function sanitizeSettings(raw = {}) {
-  const language = isKnownLanguage(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
+  const language = isKnownLanguage(raw.language) ? raw.language : languageFromBrowser();
   const tldChoice = TLD_CHIPS.includes(raw.tldChoice) ? raw.tldChoice : DEFAULT_SETTINGS.tldChoice;
   const customCheck = validateTld(raw.customTld, new Set());
   const customTld = customCheck.ok ? customCheck.tld : '';
@@ -41,7 +41,7 @@ export function readStoredSettings() {
   } catch {
     /* private mode or bad JSON */
   }
-  return { ...DEFAULT_SETTINGS };
+  return sanitizeSettings({});
 }
 
 export function storeSettings(settings) {
