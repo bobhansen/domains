@@ -663,6 +663,42 @@ button:focus-visible {
 
 .stats .found { color: var(--sage); }
 
+.stats-hit {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.locale-debug-dialog {
+  width: min(46rem, calc(100vw - 1.5rem));
+}
+
+.locale-debug-status {
+  margin: 0 0 0.6rem;
+}
+
+.locale-debug-pre {
+  margin: 0;
+  max-height: min(28rem, calc(100dvh - 12rem));
+  overflow: auto;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  font: 500 0.75rem/1.4 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.locale-debug-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
 .results-grid {
   --chit-min-width: 11.5rem;
   --chit-row-height: 5.5rem;

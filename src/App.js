@@ -5,12 +5,14 @@ import { shouldUseCompactLayout } from './lib/layout.js';
 import Controls from './components/Controls.js';
 import ActivityLog from './components/ActivityLog.js';
 import About from './components/About.js';
+import LocaleDebug from './components/LocaleDebug.js';
 import ResultsGrid from './components/ResultsGrid.js';
 import StageTld from './components/StageTld.js';
 
 export default function App() {
   const finder = useDomainFinder();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [localeDebugOpen, setLocaleDebugOpen] = useState(false);
   const [compact, setCompact] = useState(() => window.innerWidth <= 860);
   const appRef = useRef(null);
   const railRef = useRef(null);
@@ -121,7 +123,12 @@ export default function App() {
             onStart=${startSearch}
           />
 
-          <${ActivityLog} logs=${finder.logs} found=${finder.found} checked=${finder.checked} />
+          <${ActivityLog}
+            logs=${finder.logs}
+            found=${finder.found}
+            checked=${finder.checked}
+            onLocaleDebug=${() => setLocaleDebugOpen(true)}
+          />
         </aside>
 
         <div className="stage-slot">
@@ -166,6 +173,11 @@ export default function App() {
           </button>
         </div>
       </div>
+      <${LocaleDebug}
+        open=${localeDebugOpen}
+        onClose=${() => setLocaleDebugOpen(false)}
+        currentLanguage=${finder.language}
+      />
     </${Fragment}>
   `;
 }
