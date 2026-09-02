@@ -1,9 +1,3 @@
-export const LIMITS = {
-  target: { min: 1, max: 250, fallback: 20 },
-  length: { min: 3, max: 20, minFallback: 4, maxFallback: 8 },
-  shortBias: { min: 0.1, max: 1000, fallback: 10 },
-};
-
 export const LENGTH_PRESETS = [
   { id: 'shorter', label: 'Shorter', bias: 1000 },
   { id: 'short', label: 'Short', bias: 10 },
@@ -11,6 +5,14 @@ export const LENGTH_PRESETS = [
   { id: 'long', label: 'Long', bias: 0.5 },
   { id: 'longer', label: 'Longer', bias: 0.1 },
 ];
+
+const SHORT_PRESET = LENGTH_PRESETS.find((p) => p.id === 'short');
+
+export const LIMITS = {
+  target: { min: 1, max: 250, fallback: 20 },
+  length: { min: 3, max: 20, minFallback: 4, maxFallback: 8 },
+  shortBias: { min: 0.1, max: 1000, fallback: SHORT_PRESET.bias },
+};
 
 export function clampInt(value, min, max, fallback) {
   const n = typeof value === 'number' ? value : Number.parseInt(value, 10);

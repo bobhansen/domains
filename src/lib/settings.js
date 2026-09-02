@@ -41,7 +41,7 @@ export function readStoredSettings() {
   } catch {
     /* private mode or bad JSON */
   }
-  return sanitizeSettings({});
+  return sanitizeSettings({ ...DEFAULT_SETTINGS });
 }
 
 export function storeSettings(settings) {
