@@ -8,8 +8,8 @@ import { isKnownLanguage, languageByCode } from '../lib/languages.js';
 import { readStoredSettings, storeSettings } from '../lib/settings.js';
 import {
   DNS_CONCURRENCY,
-  abortInFlightRequests,
-  clearRdapPushback,
+  dropQueuedDns,
+  dropQueuedRdap,
   dnsLooksUndelegated,
   initRdapBootstrap,
   rdapIsUnregistered,
@@ -25,6 +25,10 @@ function describeSearchError(err) {
   if (/rate-limited/i.test(msg)) return 'Had to stop — too many checks at once.';
   if (/registry-error/i.test(msg)) return "Couldn't confirm names with the registry.";
   return 'Search hit a problem.';
+}
+
+function isFilledStatus(status) {
+  return status === 'pending' || status === 'available';
 }
 
 export { TLD_CHIPS };
@@ -50,6 +54,7 @@ export function useDomainFinder() {
 
   const generatorRef = useRef(null);
   const validTldsRef = useRef(new Set());
+  const fillingRef = useRef(false);
   const runningRef = useRef(false);
   const abortRef = useRef(null);
   const runIdRef = useRef(0);
@@ -58,10 +63,11 @@ export function useDomainFinder() {
   const settingsRef = useRef({});
   const customTldRef = useRef(customTld);
   const capacityRef = useRef(0);
-  const foundRef = useRef([]);
+  const boardRef = useRef([]);
   const checkedHistoryRef = useRef(new Set());
   const nextIdRef = useRef(0);
   const checkedCountRef = useRef(0);
+  const slotTokenRef = useRef(new Map());
 
   const log = useCallback((msg, type = 'normal') => {
     const id = ++logIdRef.current;
@@ -110,19 +116,20 @@ export function useDomainFinder() {
     };
   }, []);
 
-  const abortCurrent = useCallback(() => {
+  const abortDnsFill = useCallback(() => {
     abortRef.current?.abort();
-    abortInFlightRequests();
-    clearRdapPushback();
+    dropQueuedDns();
+    fillingRef.current = false;
+    setBusy(false);
   }, []);
 
-  const preemptRun = useCallback(() => {
-    if (!runningRef.current) return;
+  const beginNewSearch = useCallback(() => {
     runIdRef.current += 1;
-    abortCurrent();
+    abortDnsFill();
+    dropQueuedRdap();
     runningRef.current = false;
     abortRef.current = null;
-  }, [abortCurrent]);
+  }, [abortDnsFill]);
 
   useEffect(() => {
     if (!bootReady || !generatorRef.current) return undefined;
@@ -130,8 +137,7 @@ export function useDomainFinder() {
     const spec = languageByCode(language);
     setModelLang(null);
     setStatus(`Loading ${spec.name}…`);
-    preemptRun();
-    setBusy(false);
+    beginNewSearch();
 
     (async () => {
       try {
@@ -150,7 +156,7 @@ export function useDomainFinder() {
     return () => {
       cancelled = true;
     };
-  }, [bootReady, language, preemptRun]);
+  }, [bootReady, language, beginNewSearch]);
 
   const runSearch = useCallback(async (opts = {}) => {
     const reset = opts.reset !== false;
@@ -168,8 +174,7 @@ export function useDomainFinder() {
 
     const check = validateTld(choice === 'custom' ? custom : choice, validTldsRef.current);
     if (!check.ok) {
-      preemptRun();
-      setBusy(false);
+      beginNewSearch();
       log(check.error, 'error');
       return;
     }
@@ -177,14 +182,14 @@ export function useDomainFinder() {
 
     if (!reset) {
       if (runningRef.current) return;
-      if (foundRef.current.length >= capacityRef.current) return;
+      if (boardRef.current.length >= capacityRef.current) return;
     } else {
-      preemptRun();
-      clearRdapPushback();
-      foundRef.current = [];
+      beginNewSearch();
+      boardRef.current = [];
       checkedHistoryRef.current = new Set();
       nextIdRef.current = 0;
       checkedCountRef.current = 0;
+      slotTokenRef.current = new Map();
     }
 
     const {
@@ -199,6 +204,7 @@ export function useDomainFinder() {
     const runId = ++runIdRef.current;
     abortRef.current = abort;
     runningRef.current = true;
+    fillingRef.current = true;
     setBusy(true);
     if (reset) {
       setFound(0);
@@ -208,11 +214,12 @@ export function useDomainFinder() {
 
     const priorRate = expectedHitRate(generator, tld, minL, maxL, biasN);
     let totalChecked = checkedCountRef.current;
-    let finished = false;
+    let searchSettled = false;
     let wakeHitPump = () => {};
     const fadeMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 320;
     const target = () => Math.max(1, capacityRef.current);
-    const hitTarget = () => foundRef.current.length >= target();
+    const boardCount = () => boardRef.current.length;
+    const boardFull = () => boardCount() >= target();
 
     if (reset) {
       log(`Looking for .${tld} names (${minL}–${maxL} letters)…`);
@@ -231,7 +238,7 @@ export function useDomainFinder() {
     const emitStats = () => {
       if (!stillThisRun()) return;
       checkedCountRef.current = totalChecked;
-      setFound(foundRef.current.length);
+      setFound(boardCount());
       setChecked(totalChecked);
     };
 
@@ -240,27 +247,24 @@ export function useDomainFinder() {
       setResults((prev) => prev.filter((r) => r.status !== 'placeholder'));
     };
 
-    const stoppedByUser = () => abort.signal.aborted && !finished && !hitTarget();
-
-    const settleGrid = () => {
-      if (!stillThisRun()) return;
-      if (stoppedByUser()) {
-        hidePlaceholder();
-        return;
-      }
-      setResults((prev) => prev.filter((r) => r.status === 'available'));
-    };
-
-    const finishIfFull = () => {
-      if (!hitTarget() || finished) return;
-      finished = true;
-      abort.abort();
-      abortInFlightRequests();
-      wakeHitPump();
-      if (abortRef.current === abort) abortRef.current = null;
-      runningRef.current = false;
+    const markSearchSettled = () => {
+      if (searchSettled || !stillThisRun()) return;
+      searchSettled = true;
+      fillingRef.current = false;
       setBusy(false);
       hidePlaceholder();
+      const n = boardCount();
+      log(`Search complete. Checked ${totalChecked} domains and found ${n}.`, 'success');
+      setStatus(`Found ${n} · checked ${totalChecked}`);
+    };
+
+    const resumeFilling = () => {
+      if (!stillThisRun() || abort.signal.aborted) return;
+      if (fillingRef.current) return;
+      fillingRef.current = true;
+      searchSettled = false;
+      setBusy(true);
+      setStatus(`Searching .${tld} · ${minL}–${maxL} letters`);
     };
 
     const makePlaceholder = (phase = 'in') => ({
@@ -279,10 +283,10 @@ export function useDomainFinder() {
       setResults([makePlaceholder()]);
     } else {
       setResults((prev) => {
-        const available = prev.filter((r) => r.status === 'available');
-        if (available.length >= target()) return available;
+        const keep = prev.filter((r) => isFilledStatus(r.status));
+        if (keep.length >= target()) return keep;
         if (prev.some((r) => r.status === 'placeholder')) return prev;
-        return [...prev, makePlaceholder()];
+        return [...keep, makePlaceholder()];
       });
     }
 
@@ -301,23 +305,42 @@ export function useDomainFinder() {
           domain: word ? `${word}.${tld}` : '',
         };
         const i = prev.findIndex((r) => r.id === id);
+        const copy = prev.slice();
         if (i === -1) {
-          const ph = prev.findIndex((r) => r.status === 'placeholder');
-          const copy = prev.slice();
+          const ph = copy.findIndex((r) => r.status === 'placeholder');
           if (ph !== -1) copy[ph] = row;
           else if (namedCount(copy) < target()) copy.push(row);
           if (fillingPlaceholder || ph !== -1) nextIdRef.current = Math.max(nextIdRef.current, Number(id) + 1);
-          if (!hitTarget() && namedCount(copy) < target()) copy.push(makePlaceholder());
-          return copy;
+        } else {
+          copy[i] = row;
+          if (fillingPlaceholder) {
+            nextIdRef.current = Math.max(nextIdRef.current, Number(id) + 1);
+          }
         }
-        const copy = prev.slice();
-        copy[i] = row;
-        if (fillingPlaceholder) {
-          nextIdRef.current = Math.max(nextIdRef.current, Number(id) + 1);
-          if (!hitTarget() && namedCount(copy) < target()) copy.push(makePlaceholder());
+        if (
+          fillingRef.current
+          && !abort.signal.aborted
+          && !boardFull()
+          && namedCount(copy) < target()
+          && !copy.some((r) => r.status === 'placeholder')
+        ) {
+          copy.push(makePlaceholder());
         }
         return copy;
       });
+    };
+
+    const putOnBoard = (id, word, status) => {
+      const item = { id, tld, word, domain: `${word}.${tld}`, status };
+      const i = boardRef.current.findIndex((row) => row.id === id);
+      if (i === -1) boardRef.current = [...boardRef.current, item];
+      else {
+        const copy = boardRef.current.slice();
+        copy[i] = item;
+        boardRef.current = copy;
+      }
+      emitStats();
+      if (boardFull()) markSearchSettled();
     };
 
     const nextCandidate = () => {
@@ -338,14 +361,14 @@ export function useDomainFinder() {
     let hitsExhausted = false;
 
     const queueLimit = () => {
-      if (hitsExhausted || abort.signal.aborted || hitTarget()) return 0;
+      if (hitsExhausted || abort.signal.aborted) return 0;
       const demand = replaceWaiters.length + appendWaiters.length;
-      if (demand === 0) return hitQueue.length;
+      if (demand === 0) return boardFull() ? hitQueue.length : MAX_PREFETCH;
       return Math.min(DNS_CONCURRENCY, Math.max(demand, MAX_PREFETCH));
     };
 
     const takeHit = (kind) => {
-      if (hitsExhausted || abort.signal.aborted || hitTarget()) return Promise.resolve(null);
+      if (hitsExhausted || abort.signal.aborted) return Promise.resolve(null);
       if (hitQueue.length) {
         const word = hitQueue.shift();
         wakeHitPump();
@@ -364,7 +387,7 @@ export function useDomainFinder() {
     };
 
     const offerHit = (word) => {
-      if (abort.signal.aborted || hitTarget()) return;
+      if (abort.signal.aborted) return;
       if (replaceWaiters.length) replaceWaiters.shift()(word);
       else if (appendWaiters.length) appendWaiters.shift()(word);
       else hitQueue.push(word);
@@ -387,7 +410,18 @@ export function useDomainFinder() {
       };
 
       try {
-        while (!abort.signal.aborted && !hitTarget()) {
+        while (!abort.signal.aborted) {
+          const demand = replaceWaiters.length + appendWaiters.length;
+          const needMore = boardCount() < target();
+          if (demand === 0 && !needMore) {
+            await Promise.race([
+              new Promise((resolve) => {
+                wakeHitPump = resolve;
+              }),
+              sleep(250, abort.signal).catch(() => {}),
+            ]);
+            continue;
+          }
           if (hitQueue.length >= queueLimit()) {
             await Promise.race([
               new Promise((resolve) => {
@@ -399,8 +433,12 @@ export function useDomainFinder() {
           }
           const word = nextCandidate();
           if (!word) {
-            if (inflight.size === 0) break;
-            await Promise.race(inflight);
+            if (inflight.size > 0) {
+              await Promise.race(inflight);
+              continue;
+            }
+            if (needMore || demand > 0) break;
+            await sleep(250, abort.signal).catch(() => {});
             continue;
           }
           launch(word);
@@ -414,128 +452,144 @@ export function useDomainFinder() {
       }
     };
 
-    const confirmSlot = (id, word) => {
-      const item = {
-        id,
-        tld,
-        word,
-        domain: `${word}.${tld}`,
-        status: 'available',
-        phase: 'shown',
-      };
-      if (!foundRef.current.some((row) => row.id === id || row.word === word)) {
-        foundRef.current = [...foundRef.current, item];
-      }
-      setSlot(id, { word, status: 'available', phase: 'shown' });
-      emitStats();
-      finishIfFull();
-      return true;
+    const occupySlot = (id, word, phase = 'populate') => {
+      const token = (slotTokenRef.current.get(id) || 0) + 1;
+      slotTokenRef.current.set(id, token);
+      const status = useRdap ? 'pending' : 'available';
+      setSlot(id, { word, status, phase });
+      putOnBoard(id, word, status);
+      return token;
     };
 
-    const runSlot = async (id, firstWord) => {
-      let word = firstWord;
-      let rdapPromise = useRdap
-        ? rdapIsUnregistered(`${word}.${tld}`, tld, log, abort.signal)
-        : Promise.resolve(true);
-      setSlot(id, { word, status: 'pending', phase: 'populate' });
+    const tokenMatches = (id, token) => stillThisRun() && slotTokenRef.current.get(id) === token;
+
+    const confirmAvailable = (id, word) => {
+      if (!stillThisRun()) return;
+      setSlot(id, { word, status: 'available', phase: 'shown' });
+      putOnBoard(id, word, 'available');
+      wakeHitPump();
+    };
+
+    const verifySlot = async (id, word, token) => {
       if (!useRdap) {
-        confirmSlot(id, word);
+        confirmAvailable(id, word);
         return;
       }
 
-      while (!abort.signal.aborted && !hitTarget()) {
+      let currentWord = word;
+      let currentToken = token;
+
+      while (tokenMatches(id, currentToken)) {
         let available = false;
         try {
-          available = await rdapPromise;
+          available = await rdapIsUnregistered(`${currentWord}.${tld}`, tld, log);
         } catch (e) {
           if (isAbortError(e)) return;
-          log(`Couldn't confirm ${word}.${tld} with the registry.`, 'error');
+          if (!tokenMatches(id, currentToken)) return;
+          log(`Couldn't confirm ${currentWord}.${tld} with the registry.`, 'error');
           available = false;
         }
-        rdapPromise = null;
-        if (abort.signal.aborted) return;
+        if (!tokenMatches(id, currentToken)) return;
         if (available) {
-          confirmSlot(id, word);
+          confirmAvailable(id, currentWord);
           return;
         }
-        if (hitTarget()) return;
 
-        setSlot(id, { word, status: 'taken', phase: 'shown' });
-        const failedWord = word;
-        word = await takeHit('replace');
-        if (!word || abort.signal.aborted || hitTarget()) return;
-        rdapPromise = rdapIsUnregistered(`${word}.${tld}`, tld, log, abort.signal);
-        setSlot(id, { word: failedWord, status: 'taken', phase: 'out' });
-        await sleep(fadeMs, abort.signal).catch(() => {});
-        if (abort.signal.aborted || hitTarget()) return;
-        setSlot(id, { word, status: 'pending', phase: 'in' });
+        setSlot(id, { word: currentWord, status: 'taken', phase: 'shown' });
+        if (abort.signal.aborted) {
+          boardRef.current = boardRef.current.filter((row) => row.id !== id);
+          emitStats();
+          return;
+        }
+
+        const nextWord = await takeHit('replace');
+        if (!nextWord || !tokenMatches(id, currentToken)) return;
+        if (abort.signal.aborted) return;
+
+        setSlot(id, { word: currentWord, status: 'taken', phase: 'out' });
+        await sleep(fadeMs).catch(() => {});
+        if (!tokenMatches(id, currentToken) || abort.signal.aborted) return;
+
+        currentWord = nextWord;
+        currentToken = occupySlot(id, currentWord, 'in');
       }
+    };
+
+    const runSlot = async (id, firstWord) => {
+      const token = occupySlot(id, firstWord);
+      await verifySlot(id, firstWord, token);
     };
 
     try {
       const pumping = pumpDnsHits();
       const workers = [];
       let launchId = nextIdRef.current;
-      let pendingWorkers = 0;
-      while (!abort.signal.aborted && !hitTarget()) {
-        const want = Math.max(0, target() - foundRef.current.length);
-        if (pendingWorkers >= want) {
+      let liveSlots = reset ? 0 : boardCount();
+
+      while (!abort.signal.aborted && stillThisRun()) {
+        const want = Math.max(0, target() - liveSlots);
+        if (want <= 0) {
+          if (boardFull()) markSearchSettled();
+          else resumeFilling();
           await sleep(120, abort.signal).catch(() => {});
           continue;
         }
+        if (!fillingRef.current) resumeFilling();
         const word = await takeHit('append');
         if (!word) break;
         const id = launchId;
         launchId += 1;
         nextIdRef.current = Math.max(nextIdRef.current, launchId);
-        pendingWorkers += 1;
-        workers.push(runSlot(id, word).finally(() => {
-          pendingWorkers -= 1;
-        }));
+        liveSlots += 1;
+        workers.push(runSlot(id, word));
       }
+
+      if (stillThisRun()) {
+        if (searchSettled) {
+          /* already logged when the board filled */
+        } else if (abort.signal.aborted) {
+          hidePlaceholder();
+        } else if (!boardFull()) {
+          hidePlaceholder();
+          log('Couldn’t find enough unused names at this length. Try a wider range.', 'error');
+          setStatus('Search stopped.');
+          fillingRef.current = false;
+          setBusy(false);
+        }
+      }
+
       await Promise.all(workers);
       await pumping.catch(() => {});
-      if (!stillThisRun()) return;
-      settleGrid();
-      if (finished || hitTarget()) {
-        const n = foundRef.current.length;
-        log(`Search complete. Checked ${totalChecked} domains and found ${n}.`, 'success');
-        setStatus(`Found ${n} · checked ${totalChecked}`);
-      } else if (abort.signal.aborted) {
-        log('Search stopped.');
-        setStatus('Search stopped.');
-      } else {
-        log('Couldn’t find enough unused names at this length. Try a wider range.', 'error');
-        setStatus('Search stopped.');
-      }
     } catch (e) {
       if (!stillThisRun()) return;
-      settleGrid();
-      if (finished || hitTarget()) {
-        log(
-          `Search complete. Checked ${totalChecked} domains and found ${foundRef.current.length}.`,
-          'success',
-        );
+      hidePlaceholder();
+      if (searchSettled) {
+        /* already logged when the board filled */
       } else if (isAbortError(e) || abort.signal.aborted) {
-        log('Search stopped.');
-        setStatus('Search stopped.');
+        hidePlaceholder();
       } else {
         log(describeSearchError(e), 'error');
         setStatus('Search stopped on an error.');
+        fillingRef.current = false;
+        setBusy(false);
       }
     } finally {
       if (!stillThisRun()) return;
       if (abortRef.current === abort) abortRef.current = null;
       runningRef.current = false;
+      fillingRef.current = false;
       setBusy(false);
       hidePlaceholder();
     }
-  }, [log, preemptRun]);
+  }, [log, beginNewSearch]);
 
   const cancelSearch = useCallback(() => {
-    if (!runningRef.current) return;
-    abortCurrent();
-  }, [abortCurrent]);
+    if (!fillingRef.current) return;
+    abortDnsFill();
+    setResults((prev) => prev.filter((r) => r.status !== 'placeholder'));
+    log('Search stopped.');
+    setStatus('Search stopped.');
+  }, [abortDnsFill, log]);
 
   const layoutReady = capacity >= 1;
 
@@ -547,43 +601,35 @@ export function useDomainFinder() {
     customTldRef.current = customTld;
 
     if (!tld) {
-      preemptRun();
-      setBusy(false);
+      beginNewSearch();
       return undefined;
     }
 
     if (!layoutReady) return undefined;
 
     if (tldChoice === 'custom' && customTldChanged) {
-      preemptRun();
-      setBusy(false);
+      beginNewSearch();
       const timer = setTimeout(() => runSearch({ reset: true }), CUSTOM_TLD_DEBOUNCE_MS);
       return () => clearTimeout(timer);
     }
 
     runSearch({ reset: true });
     return undefined;
-  }, [ready, layoutReady, tldChoice, customTld, minLen, maxLen, shortBias, language, runSearch, preemptRun]);
+  }, [ready, layoutReady, tldChoice, customTld, minLen, maxLen, shortBias, language, runSearch, beginNewSearch]);
 
   useEffect(() => {
     if (!ready || !layoutReady) return undefined;
 
     setResults((prev) => {
       const have = new Set(prev.map((row) => row.id));
-      const missing = foundRef.current.filter((row) => !have.has(row.id));
+      const missing = boardRef.current.filter((row) => !have.has(row.id));
       if (!missing.length) return prev;
-      const available = prev.filter((row) => row.status === 'available');
-      const inflight = prev.filter((row) => row.status !== 'available');
-      return available.concat(missing, inflight);
+      const filled = prev.filter((row) => isFilledStatus(row.status));
+      const rest = prev.filter((row) => !isFilledStatus(row.status));
+      return filled.concat(missing, rest);
     });
 
-    if (foundRef.current.length >= capacity) {
-      if (runningRef.current) {
-        abortRef.current?.abort();
-        abortInFlightRequests();
-      }
-      return undefined;
-    }
+    if (boardRef.current.length >= capacity) return undefined;
     if (runningRef.current) return undefined;
     runSearch({ reset: false });
     return undefined;

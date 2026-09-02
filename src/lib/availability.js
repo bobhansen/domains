@@ -9,7 +9,7 @@ export const RDAP_CONCURRENCY = 2;
 export const RATE_WAIT_CAP_MS = 90_000;
 
 export const VERDICT = {
-  pending: { cls: 'is-pending', title: 'Checking the registry...' },
+  pending: { cls: 'is-pending', title: 'Confirming with the registry...' },
   available: { cls: 'is-available', title: "Looks like it's available" },
   taken: { cls: 'is-taken', title: "We thought it was available, but it wasn't." },
   placeholder: { cls: 'is-pending is-placeholder', title: 'Looking for the next name...' },
@@ -195,9 +195,23 @@ export function subscribeRdapPushback(fn) {
   return () => rdapPushback.listeners.delete(fn);
 }
 
-export function abortInFlightRequests() {
+export function dropQueuedDns() {
+  dropQueued(isDnsLookupHost);
+}
+
+export function dropQueuedRdap() {
+  dropQueued((host) => !isDnsLookupHost(host));
+}
+
+function dropQueued(pred) {
   const err = abortError();
-  for (const gate of hostGates.values()) gate.clear(err);
+  for (const [host, gate] of hostGates) {
+    if (pred(host)) gate.clear(err);
+  }
+}
+
+export function abortInFlightRequests() {
+  dropQueued(() => true);
 }
 
 function gateFor(url, concurrency) {
