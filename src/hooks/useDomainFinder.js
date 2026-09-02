@@ -3,6 +3,7 @@ import { MarkovGenerator } from '../lib/markov.js';
 import { loadValidTlds } from '../lib/tlds.js';
 import { expectedHitRate } from '../lib/hitRates.js';
 import { LIMITS, clampInt, clampSettings, snapShortBias } from '../lib/limits.js';
+import { resolvedTld, validateTld } from '../lib/tld.js';
 import {
   DNS_CONCURRENCY,
   RDAP_CONCURRENCY,
@@ -16,10 +17,6 @@ import { isAbortError, sleep } from '../lib/pool.js';
 
 const LOG_CAP = 220;
 const CUSTOM_TLD_DEBOUNCE_MS = 400;
-
-function resolvedTld(choice, custom) {
-  return (choice === 'custom' ? custom : choice).trim().toLowerCase().replace(/^\./, '');
-}
 
 export const TLD_CHIPS = ['com', 'org', 'net', 'me', 'io', 'co', 'ai', 'app', 'custom'];
 
@@ -121,19 +118,14 @@ export function useDomainFinder() {
       shortBias: bias,
     } = settingsRef.current;
 
-    const tld = resolvedTld(choice, custom);
-    if (!tld) {
+    const check = validateTld(choice === 'custom' ? custom : choice, validTldsRef.current);
+    if (!check.ok) {
       preemptRun();
       setBusy(false);
-      log('Please enter a TLD.', 'error');
+      log(check.error, 'error');
       return;
     }
-    if (validTldsRef.current.size > 0 && !validTldsRef.current.has(tld)) {
-      preemptRun();
-      setBusy(false);
-      log(`Warning: ".${tld}" does not appear to be a valid IANA TLD.`, 'error');
-      return;
-    }
+    const tld = check.tld;
 
     if (!reset) {
       if (runningRef.current) return;
@@ -541,6 +533,8 @@ export function useDomainFinder() {
     setShortBias(snapShortBias(raw));
   }
 
+  const validateCustomTld = useCallback((raw) => validateTld(raw, validTldsRef.current), []);
+
   return {
     ready,
     busy,
@@ -563,5 +557,6 @@ export function useDomainFinder() {
     setShortBias: commitShortBias,
     runSearch,
     cancelSearch,
+    validateCustomTld,
   };
 }

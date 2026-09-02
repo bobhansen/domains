@@ -3,6 +3,7 @@ import { TLD_CHIPS } from '../hooks/useDomainFinder.js';
 import { LIMITS, LENGTH_PRESETS, lengthPresetIndex, stepLengthPreset } from '../lib/limits.js';
 
 export default function Controls({
+  compact,
   tldChoice,
   onTldChange,
   customTld,
@@ -22,6 +23,7 @@ export default function Controls({
 
   return html`
     <form className="panel controls" onSubmit=${(e) => e.preventDefault()}>
+      ${!compact && html`
       <fieldset>
         <legend>TLD</legend>
         <div className="chip-row" role="radiogroup" aria-label="TLD">
@@ -54,6 +56,7 @@ export default function Controls({
           </div>
         `}
       </fieldset>
+      `}
 
       <div className="pair">
         <div>

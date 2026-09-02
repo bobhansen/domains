@@ -6,6 +6,7 @@ import Controls from './components/Controls.js';
 import ActivityLog from './components/ActivityLog.js';
 import About from './components/About.js';
 import ResultsGrid from './components/ResultsGrid.js';
+import StageTld from './components/StageTld.js';
 
 export default function App() {
   const finder = useDomainFinder();
@@ -102,6 +103,7 @@ export default function App() {
           </header>
 
           <${Controls}
+            compact=${compact}
             tldChoice=${finder.tldChoice}
             onTldChange=${finder.setTldChoice}
             customTld=${finder.customTld}
@@ -124,6 +126,15 @@ export default function App() {
           <main className="panel stage">
             <header className="stage-head">
               <h2>Available names</h2>
+              ${compact && html`
+                <${StageTld}
+                  tldChoice=${finder.tldChoice}
+                  customTld=${finder.customTld}
+                  onTldChange=${finder.setTldChoice}
+                  onCustomTldChange=${finder.setCustomTld}
+                  validateTld=${finder.validateCustomTld}
+                />
+              `}
             </header>
             <${ResultsGrid}
               results=${finder.results}

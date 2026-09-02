@@ -226,6 +226,7 @@ input[type="text"] {
 }
 
 input:focus,
+select:focus,
 .tld-chip:focus-visible,
 button:focus-visible {
   outline: none;
@@ -453,6 +454,10 @@ button:focus-visible {
 }
 
 .stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--line);
 }
@@ -465,6 +470,91 @@ button:focus-visible {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.stage-tld {
+  appearance: none;
+  flex: 0 0 auto;
+  min-height: 2.1rem;
+  padding: 0.28rem 1.7rem 0.28rem 0.65rem;
+  background-color: var(--ink);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.85rem) calc(50% - 0.12rem),
+    calc(100% - 0.55rem) calc(50% - 0.12rem);
+  background-size: 0.32rem 0.32rem, 0.32rem 0.32rem;
+  background-repeat: no-repeat;
+  border: 1px solid var(--line);
+  color: var(--paper);
+  border-radius: 8px;
+  font: 600 0.82rem/1.2 var(--mono);
+  cursor: pointer;
+}
+
+.stage-tld:focus {
+  outline: none;
+  border-color: var(--copper);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.tld-dialog {
+  width: min(22rem, calc(100vw - 1.5rem));
+  margin: auto;
+  padding: 1.2rem 1.25rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--paper);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+}
+
+.tld-dialog::backdrop {
+  background: rgba(8, 6, 4, 0.62);
+}
+
+.tld-dialog h3 {
+  margin: 0 0 0.75rem;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tld-dialog-form input {
+  width: 100%;
+}
+
+.tld-dialog-error {
+  margin: 0.45rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--danger);
+}
+
+.tld-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.tld-dialog-apply {
+  appearance: none;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 500 0.875rem/1.2 var(--sans);
+  cursor: pointer;
+}
+
+.tld-dialog-apply:hover {
+  background: #fff;
 }
 
 .stats {
