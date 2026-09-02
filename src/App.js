@@ -1,19 +1,39 @@
-import { useEffect, useRef, useState, Fragment } from 'react';
+import { useEffect, useRef, useState, useCallback, Fragment } from 'react';
 import { html } from './html.js';
 import { useDomainFinder } from './hooks/useDomainFinder.js';
-import { shouldUseCompactLayout } from './lib/layout.js';
+import { inspectLayout, formatLayoutReport, NARROW_PX, shouldUseCompactLayout } from './lib/layout.js';
+import { buildLanguageDebugReport } from './lib/languages.js';
+import { SETTINGS_KEY } from './lib/settings.js';
 import Controls from './components/Controls.js';
 import ActivityLog from './components/ActivityLog.js';
 import About from './components/About.js';
-import LocaleDebug from './components/LocaleDebug.js';
+import SignalDebug from './components/SignalDebug.js';
 import ResultsGrid from './components/ResultsGrid.js';
 import StageTld from './components/StageTld.js';
+
+function storedLanguageSnapshot() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw == null) return { storedJson: '(absent)', storedLanguage: '' };
+    let language = '';
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.language) language = String(parsed.language);
+    } catch {
+      language = '';
+    }
+    return { storedJson: raw, storedLanguage: language };
+  } catch {
+    return { storedJson: '(error reading localStorage)', storedLanguage: '' };
+  }
+}
 
 export default function App() {
   const finder = useDomainFinder();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [compact, setCompact] = useState(() => window.innerWidth <= NARROW_PX);
   const [localeDebugOpen, setLocaleDebugOpen] = useState(false);
-  const [compact, setCompact] = useState(() => window.innerWidth <= 860);
+  const [layoutDebugOpen, setLayoutDebugOpen] = useState(false);
   const appRef = useRef(null);
   const railRef = useRef(null);
   const chromeRef = useRef(0);
@@ -63,6 +83,21 @@ export default function App() {
     setSheetOpen(false);
     finder.runSearch({ reset: true });
   }
+
+  const buildLocaleReport = useCallback(
+    () => buildLanguageDebugReport(finder.language, storedLanguageSnapshot()),
+    [finder.language],
+  );
+
+  const buildLayoutReport = useCallback(
+    () => formatLayoutReport(inspectLayout({
+      rail: railRef.current,
+      app: appRef.current,
+      compact,
+      cachedChrome: chromeRef.current,
+    })),
+    [compact],
+  );
 
   const classes = [
     'app',
@@ -128,6 +163,7 @@ export default function App() {
             found=${finder.found}
             checked=${finder.checked}
             onLocaleDebug=${() => setLocaleDebugOpen(true)}
+            onLayoutDebug=${() => setLayoutDebugOpen(true)}
           />
         </aside>
 
@@ -173,10 +209,17 @@ export default function App() {
           </button>
         </div>
       </div>
-      <${LocaleDebug}
+      <${SignalDebug}
         open=${localeDebugOpen}
         onClose=${() => setLocaleDebugOpen(false)}
-        currentLanguage=${finder.language}
+        title="Language signals"
+        buildReport=${buildLocaleReport}
+      />
+      <${SignalDebug}
+        open=${layoutDebugOpen}
+        onClose=${() => setLayoutDebugOpen(false)}
+        title="Layout signals"
+        buildReport=${buildLayoutReport}
       />
     </${Fragment}>
   `;

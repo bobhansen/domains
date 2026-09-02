@@ -5,7 +5,7 @@ export async function loadValidTlds(log) {
   const cached = await getCache(cacheKey);
   if (cached) return new Set(cached);
 
-  log('Fetching canonical IANA TLD list...');
+  log('Getting the list of domain endings…');
   try {
     const res = await fetch('https://data.iana.org/TLD/tlds-alpha-by-domain.txt');
     const text = await res.text();
@@ -14,10 +14,10 @@ export async function loadValidTlds(log) {
       .filter((l) => l && !l.startsWith('#'))
       .map((l) => l.trim().toLowerCase());
     await setCache(cacheKey, tlds);
-    log(`Loaded ${tlds.length} top-level domains.`, 'success');
+    log('Domain endings are ready.', 'success');
     return new Set(tlds);
   } catch {
-    log('Failed to fetch IANA TLDs, relying on basic validation.', 'error');
+    log("Couldn't download the list of domain endings. Custom ones may not be checked.", 'error');
     return new Set();
   }
 }

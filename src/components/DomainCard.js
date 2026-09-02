@@ -2,8 +2,11 @@ import { html } from '../html.js';
 import { VERDICT } from '../lib/availability.js';
 
 function VerdictMark({ status }) {
-  if (status === 'pending' || status === 'placeholder') {
+  if (status === 'placeholder') {
     return html`<span className="verdict-spin" />`;
+  }
+  if (status === 'pending') {
+    return html`<span className="verdict-ask">?</span>`;
   }
   return html`
     <span className=${status === 'available' ? 'verdict-ok' : 'verdict-no'}>

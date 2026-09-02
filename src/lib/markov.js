@@ -137,29 +137,28 @@ export class MarkovGenerator {
     if (cacheLooksValid(cached)) {
       this.applyCache(cached);
       this.lang = spec.code;
-      log(`Markov model for ${spec.name} loaded from browser storage.`, 'success');
       return;
     }
 
-    log(`Loading ${spec.name} word list…`);
+    log(`Loading common ${spec.name} words…`);
     const res = await fetch(spec.path);
     if (!still()) return;
-    if (!res.ok) throw new Error(`Could not fetch ${spec.path} (${res.status})`);
+    if (!res.ok) throw new Error('Could not download the word list.');
     const text = await res.text();
     if (!still()) return;
     const words = normalizeWords(parseWordCsv(text), this.locale);
-    if (words.length < 50) throw new Error(`Not enough usable words in ${spec.path}`);
+    if (words.length < 50) throw new Error('Not enough usable words.');
 
-    log(`Training generator on ${words.length} ${spec.name} words…`);
+    log(`Learning how ${spec.name} names sound…`);
     this.buildModel(words);
     if (!still()) return;
     this.lang = spec.code;
     const payload = this.toCache();
     try {
       await setCache(cacheKey, payload);
-      log('Training complete and cached.', 'success');
+      log('Ready to invent names.', 'success');
     } catch {
-      log('Training complete. Browser storage was full, so this model was not saved.', 'error');
+      log("Ready to invent names. Couldn't save them for next time.", 'error');
     }
   }
 

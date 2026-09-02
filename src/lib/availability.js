@@ -1,5 +1,5 @@
 import { getCache, setCache } from './cache.js';
-import { abortError, asyncPool, isAbortError, sleep, throwIfAborted } from './pool.js';
+import { abortError, asyncPool, isAbortError, throwIfAborted } from './pool.js';
 
 export const DNS_RCODE_NXDOMAIN = 3;
 export const DNS_TYPE_SOA = 6;
@@ -9,7 +9,7 @@ export const RDAP_CONCURRENCY = 2;
 export const RATE_WAIT_CAP_MS = 90_000;
 
 export const VERDICT = {
-  pending: { cls: 'is-pending', title: 'Checking another source...' },
+  pending: { cls: 'is-pending', title: 'Checking the registry...' },
   available: { cls: 'is-available', title: "Looks like it's available" },
   taken: { cls: 'is-taken', title: "We thought it was available, but it wasn't." },
   placeholder: { cls: 'is-pending is-placeholder', title: 'Looking for the next name...' },
@@ -38,16 +38,23 @@ function parseRetryAfterMs(res) {
   return null;
 }
 
+const DEFAULT_COOLDOWN_MS = 2_000;
+
+function isBackoffStatus(status) {
+  return status === 429 || status === 403 || status === 503;
+}
+
+function isDnsLookupHost(host) {
+  return /(^|\.)cloudflare-dns\.com$/i.test(host);
+}
+
 function createServiceGate(initialConcurrency) {
   let cap = initialConcurrency;
   let active = 0;
   const q = [];
   let coolUntil = 0;
-  let gapMs = 0;
-  let lastStart = 0;
-  let lastThrottleAt = 0;
+  let lastLogUntil = 0;
   let timer = null;
-  const QUIET_RESTORE_MS = 20_000;
 
   function arm(ms) {
     if (timer) return;
@@ -57,31 +64,17 @@ function createServiceGate(initialConcurrency) {
     }, Math.max(0, ms));
   }
 
-  function restoreIfQuiet(now) {
-    if (now < coolUntil) return;
-    const quietFor = now - Math.max(lastThrottleAt, coolUntil);
-    if (quietFor >= QUIET_RESTORE_MS) {
-      cap = initialConcurrency;
-      gapMs = 0;
-    }
-  }
-
   function pump() {
     const now = Date.now();
-    restoreIfQuiet(now);
     if (now < coolUntil) {
+      cap = 0;
       arm(coolUntil - now);
       return;
     }
-    const gap = lastStart + gapMs - now;
-    if (gap > 0) {
-      arm(gap);
-      return;
-    }
-    while (active < cap && q.length && Date.now() >= coolUntil && Date.now() >= lastStart + gapMs) {
+    cap = initialConcurrency;
+    while (active < cap && q.length && Date.now() >= coolUntil) {
       const job = q.shift();
       active++;
-      lastStart = Date.now();
       Promise.resolve()
         .then(job.fn)
         .then(job.resolve, job.reject)
@@ -92,6 +85,22 @@ function createServiceGate(initialConcurrency) {
     }
   }
 
+  function cooldown(waitMs, log, host, status) {
+    const wait = Math.max(250, Math.min(RATE_WAIT_CAP_MS, waitMs));
+    const until = Date.now() + wait;
+    const extended = until > coolUntil + 50;
+    coolUntil = Math.max(coolUntil, until);
+    cap = 0;
+    if (isBackoffStatus(status) && extended && coolUntil > lastLogUntil + 250) {
+      lastLogUntil = coolUntil;
+      const secs = Math.max(1, Math.ceil((Math.max(0, coolUntil - Date.now())) / 1000));
+      log(
+        `We're pausing domain validations because we're sending too many requests and getting errors. Waiting for ${secs} seconds.`,
+      );
+    }
+    pump();
+  }
+
   return {
     schedule(fn) {
       return new Promise((resolve, reject) => {
@@ -99,19 +108,7 @@ function createServiceGate(initialConcurrency) {
         pump();
       });
     },
-    pause(ms) {
-      const now = Date.now();
-      lastThrottleAt = now;
-      coolUntil = Math.max(coolUntil, now + ms);
-      gapMs = Math.max(gapMs, Math.min(Math.floor(ms / 3), 2500));
-      cap = Math.max(1, Math.ceil(cap / 2));
-      pump();
-    },
-    succeed() {
-      if (Date.now() < coolUntil) return;
-      if (cap < initialConcurrency) cap = Math.min(initialConcurrency, cap + 1);
-      gapMs = gapMs < 40 ? 0 : Math.floor(gapMs / 2);
-    },
+    cooldown,
     clear(err) {
       if (timer) {
         clearTimeout(timer);
@@ -141,33 +138,34 @@ async function fetchHonoringRateLimit(url, options, concurrency, log, signal) {
   throwIfAborted(signal);
   const gate = gateFor(url, concurrency);
   const host = new URL(url).hostname;
-  let res;
+  let last = null;
+
   for (let attempt = 0; attempt < 8; attempt++) {
     throwIfAborted(signal);
-    try {
-      res = await gate.schedule(() => fetch(url, { ...options, signal }));
-    } catch (e) {
-      if (isAbortError(e) || signal?.aborted) throw abortError();
-      const wait = Math.min(12_000, 800 * 2 ** attempt);
-      log(`Request to ${host} blocked (often HTTP 429 without CORS headers); waiting ${(wait / 1000).toFixed(1)}s.`);
-      gate.pause(wait);
-      await sleep(wait, signal);
-      continue;
-    }
-    if (res.status !== 429 && res.status !== 503) {
-      gate.succeed();
-      return res;
-    }
-    const hinted = parseRetryAfterMs(res);
-    const wait = hinted != null ? Math.max(hinted, 250) : Math.min(10_000, 500 * 2 ** attempt);
-    log(
-      `HTTP ${res.status} from ${host}; waiting ${(wait / 1000).toFixed(1)}s` +
-        (hinted != null ? ' (Retry-After).' : ' (backoff).'),
-    );
-    gate.pause(wait);
-    await sleep(wait, signal);
+    const outcome = await gate.schedule(async () => {
+      throwIfAborted(signal);
+      try {
+        const res = await fetch(url, { ...options, signal });
+        if (isBackoffStatus(res.status)) {
+          const hinted = parseRetryAfterMs(res);
+          gate.cooldown(hinted != null ? hinted : DEFAULT_COOLDOWN_MS, log, host, res.status);
+          return { ok: false, res };
+        }
+        return { ok: true, res };
+      } catch (e) {
+        if (isAbortError(e) || signal?.aborted) throw abortError();
+        // RDAP 403/429 often omit CORS headers, so fetch() throws and JS
+        // never sees the status. Treat that like a 403 with no Retry-After.
+        const hidden = isDnsLookupHost(host) ? 0 : 403;
+        gate.cooldown(DEFAULT_COOLDOWN_MS, log, host, hidden);
+        return { ok: false, error: e };
+      }
+    });
+
+    if (outcome.ok) return outcome.res;
+    last = outcome.res;
   }
-  throw new Error(`rate limited: HTTP ${res && res.status} for ${url}`);
+  throw new Error('rate-limited');
 }
 
 export async function initRdapBootstrap(log) {
@@ -177,7 +175,6 @@ export async function initRdapBootstrap(log) {
     rdapBases = new Map(Object.entries(cached.bases));
     return;
   }
-  log('Fetching IANA RDAP bootstrap...');
   try {
     const res = await fetch('https://data.iana.org/rdap/dns.json');
     const data = await res.json();
@@ -194,9 +191,8 @@ export async function initRdapBootstrap(log) {
     }
     rdapBases = new Map(Object.entries(bases));
     await setCache(cacheKey, { tlds, bases });
-    log(`Registry RDAP listed for ${tlds.length} TLDs.`, 'success');
   } catch {
-    log('Failed to load RDAP bootstrap; falling back to DNS for all TLDs.', 'error');
+    log("Couldn't reach the registry list. We'll still check names.", 'error');
   }
 }
 
@@ -263,7 +259,7 @@ export async function rdapIsUnregistered(domain, tld, log, signal) {
   );
   if (res.status === 404) return true;
   if (res.status === 200) return false;
-  throw new Error(`RDAP HTTP ${res.status}`);
+  throw new Error('registry-error');
 }
 
 export async function scanNames(words, tld, { onDnsHit, onRdap, log, signal }) {
@@ -290,7 +286,7 @@ export async function scanNames(words, tld, { onDnsHit, onRdap, log, signal }) {
           onRdap(word, await rdapIsUnregistered(fqdn, tld, log, signal));
         } catch (e) {
           if (isAbortError(e)) throw e;
-          log(`RDAP still unresolved for ${fqdn}: ${e.message}`, 'error');
+          log(`Couldn't confirm ${fqdn} with the registry.`, 'error');
         }
       })());
     });

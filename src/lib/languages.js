@@ -267,6 +267,14 @@ export function formatLanguageDetectionReport(inspect, extras = {}) {
   return lines.join('\n');
 }
 
+export function buildLanguageDebugReport(currentLanguage, stored = {}) {
+  return formatLanguageDetectionReport(inspectLanguageDetection(), {
+    currentLanguage,
+    storedLanguage: stored.storedLanguage,
+    storedJson: stored.storedJson,
+  });
+}
+
 function fold(value) {
   return String(value || '')
     .normalize('NFD')

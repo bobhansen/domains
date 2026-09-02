@@ -8,7 +8,6 @@ import { isKnownLanguage, languageByCode } from '../lib/languages.js';
 import { readStoredSettings, storeSettings } from '../lib/settings.js';
 import {
   DNS_CONCURRENCY,
-  RDAP_CONCURRENCY,
   abortInFlightRequests,
   dnsLooksUndelegated,
   initRdapBootstrap,
@@ -20,12 +19,19 @@ import { isAbortError, sleep } from '../lib/pool.js';
 const LOG_CAP = 220;
 const CUSTOM_TLD_DEBOUNCE_MS = 400;
 
+function describeSearchError(err) {
+  const msg = String(err && err.message ? err.message : err);
+  if (/rate-limited/i.test(msg)) return 'Had to stop — too many checks at once.';
+  if (/registry-error/i.test(msg)) return "Couldn't confirm names with the registry.";
+  return 'Search hit a problem.';
+}
+
 export { TLD_CHIPS };
 
 export function useDomainFinder() {
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState('Loading word model…');
-  const [logs, setLogs] = useState([{ id: 0, msg: 'Initializing system...', type: 'normal' }]);
+  const [status, setStatus] = useState('Getting ready…');
+  const [logs, setLogs] = useState([{ id: 0, msg: 'Starting up…', type: 'normal' }]);
   const [results, setResults] = useState([]);
   const [found, setFound] = useState(0);
   const [checked, setChecked] = useState(0);
@@ -91,7 +97,10 @@ export function useDomainFinder() {
         if (cancelled) return;
         setBootReady(true);
       } catch (e) {
-        if (!cancelled) setStatus(`Startup failed: ${e.message}`);
+        if (!cancelled) {
+          logFnRef.current('Startup failed.', 'error');
+          setStatus('Startup failed.');
+        }
       }
     })();
 
@@ -129,7 +138,10 @@ export function useDomainFinder() {
         setModelLang(spec.code);
         setStatus('Ready — searching automatically.');
       } catch (e) {
-        if (!cancelled) setStatus(`Could not load ${spec.name}: ${e.message}`);
+        if (!cancelled) {
+          logFnRef.current(`Couldn't load ${spec.name}.`, 'error');
+          setStatus(`Couldn't load ${spec.name}.`);
+        }
       }
     })();
 
@@ -194,20 +206,21 @@ export function useDomainFinder() {
     const priorRate = expectedHitRate(generator, tld, minL, maxL, biasN);
     let totalChecked = checkedCountRef.current;
     let finished = false;
+    let wakeHitPump = () => {};
     const fadeMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 320;
     const target = () => Math.max(1, capacityRef.current);
     const hitTarget = () => foundRef.current.length >= target();
 
     if (reset) {
-      log(`Filling the panel with .${tld} names...`);
-      log(`Expected hit rate ${(priorRate * 100).toFixed(1)}% from length mix ${minL}–${maxL}.`);
+      log(`Looking for .${tld} names (${minL}–${maxL} letters)…`);
+      log(`Names this length are usually about ${(priorRate * 100).toFixed(0)}% free.`);
       if (useRdap) {
-        log('Using registry RDAP to confirm names that DNS says are undelegated.');
+        log('Names that look free get a second check with the registry.');
       } else {
-        log(`No RDAP for .${tld}; treating authoritative DNS NXDOMAIN as available.`);
+        log(`For .${tld}, one check is enough to tell if a name is free.`);
       }
     } else {
-      log(`Panel grew — finding more .${tld} names...`);
+      log(`Finding more .${tld} names…`);
     }
 
     const stillThisRun = () => runIdRef.current === runId;
@@ -229,6 +242,7 @@ export function useDomainFinder() {
       finished = true;
       abort.abort();
       abortInFlightRequests();
+      wakeHitPump();
       if (abortRef.current === abort) abortRef.current = null;
       runningRef.current = false;
       setBusy(false);
@@ -277,7 +291,7 @@ export function useDomainFinder() {
           const ph = prev.findIndex((r) => r.status === 'placeholder');
           const copy = prev.slice();
           if (ph !== -1) copy[ph] = row;
-          else copy.push(row);
+          else if (namedCount(copy) < target()) copy.push(row);
           if (fillingPlaceholder || ph !== -1) nextIdRef.current = Math.max(nextIdRef.current, Number(id) + 1);
           if (!hitTarget() && namedCount(copy) < target()) copy.push(makePlaceholder());
           return copy;
@@ -303,20 +317,26 @@ export function useDomainFinder() {
       return null;
     };
 
-    const MAX_HIT_QUEUE = Math.max(4, DNS_CONCURRENCY);
+    const MAX_PREFETCH = 4;
     const hitQueue = [];
     const replaceWaiters = [];
     const appendWaiters = [];
     let hitsExhausted = false;
-    let wakeHitPump = () => {};
+
+    const queueLimit = () => {
+      if (hitsExhausted || abort.signal.aborted || hitTarget()) return 0;
+      const demand = replaceWaiters.length + appendWaiters.length;
+      if (demand === 0) return hitQueue.length;
+      return Math.min(DNS_CONCURRENCY, Math.max(demand, MAX_PREFETCH));
+    };
 
     const takeHit = (kind) => {
+      if (hitsExhausted || abort.signal.aborted || hitTarget()) return Promise.resolve(null);
       if (hitQueue.length) {
         const word = hitQueue.shift();
         wakeHitPump();
         return Promise.resolve(word);
       }
-      if (hitsExhausted || abort.signal.aborted || hitTarget()) return Promise.resolve(null);
       return new Promise((resolve) => {
         (kind === 'replace' ? replaceWaiters : appendWaiters).push(resolve);
         wakeHitPump();
@@ -339,17 +359,14 @@ export function useDomainFinder() {
     const pumpDnsHits = async () => {
       const inflight = new Set();
       const launch = (word) => {
+        totalChecked += 1;
+        emitStats();
         const task = (async () => {
           try {
             const ok = await dnsLooksUndelegated(`${word}.${tld}`, log, abort.signal);
-            totalChecked += 1;
-            emitStats();
             if (ok) offerHit(word);
           } catch (e) {
-            if (!isAbortError(e)) {
-              totalChecked += 1;
-              emitStats();
-            }
+            if (isAbortError(e)) return;
           }
         })().finally(() => inflight.delete(task));
         inflight.add(task);
@@ -357,7 +374,7 @@ export function useDomainFinder() {
 
       try {
         while (!abort.signal.aborted && !hitTarget()) {
-          if (hitQueue.length >= MAX_HIT_QUEUE) {
+          if (hitQueue.length >= queueLimit()) {
             await Promise.race([
               new Promise((resolve) => {
                 wakeHitPump = resolve;
@@ -418,7 +435,7 @@ export function useDomainFinder() {
           available = await rdapPromise;
         } catch (e) {
           if (isAbortError(e)) return;
-          log(`RDAP still unresolved for ${word}.${tld}: ${e.message}`, 'error');
+          log(`Couldn't confirm ${word}.${tld} with the registry.`, 'error');
           available = false;
         }
         rdapPromise = null;
@@ -442,20 +459,25 @@ export function useDomainFinder() {
     };
 
     try {
-      log(
-        useRdap
-          ? `Checking names: DNS×${DNS_CONCURRENCY} pipelined into RDAP×${RDAP_CONCURRENCY}...`
-          : `Checking names against Cloudflare DoH...`,
-      );
       const pumping = pumpDnsHits();
       const workers = [];
       let launchId = nextIdRef.current;
+      let pendingWorkers = 0;
       while (!abort.signal.aborted && !hitTarget()) {
+        const want = Math.max(0, target() - foundRef.current.length);
+        if (pendingWorkers >= want) {
+          await sleep(120, abort.signal).catch(() => {});
+          continue;
+        }
         const word = await takeHit('append');
         if (!word) break;
-        workers.push(runSlot(launchId, word));
+        const id = launchId;
         launchId += 1;
         nextIdRef.current = Math.max(nextIdRef.current, launchId);
+        pendingWorkers += 1;
+        workers.push(runSlot(id, word).finally(() => {
+          pendingWorkers -= 1;
+        }));
       }
       await Promise.all(workers);
       await pumping.catch(() => {});
@@ -463,25 +485,28 @@ export function useDomainFinder() {
       setResults((prev) => prev.filter((r) => r.status === 'available'));
       if (finished || hitTarget()) {
         const n = foundRef.current.length;
-        log(`Panel filled. Checked ${totalChecked} domains. Found ${n}.`, 'success');
-        setStatus(`Panel full · ${n} ready · ${totalChecked} checked`);
+        log(`Search complete. Checked ${totalChecked} domains and found ${n}.`, 'success');
+        setStatus(`Found ${n} · checked ${totalChecked}`);
       } else if (abort.signal.aborted) {
-        log('Search cancelled.');
+        log('Search stopped.');
         setStatus('Search stopped.');
       } else {
-        log('Could not generate enough unique candidates matching constraints.', 'error');
+        log('Couldn’t find enough unused names at this length. Try a wider range.', 'error');
         setStatus('Search stopped.');
       }
     } catch (e) {
       if (!stillThisRun()) return;
       setResults((prev) => prev.filter((r) => r.status === 'available'));
       if (finished || hitTarget()) {
-        log(`Panel filled. Checked ${totalChecked} domains. Found ${foundRef.current.length}.`, 'success');
+        log(
+          `Search complete. Checked ${totalChecked} domains and found ${foundRef.current.length}.`,
+          'success',
+        );
       } else if (isAbortError(e) || abort.signal.aborted) {
-        log('Search cancelled.');
+        log('Search stopped.');
         setStatus('Search stopped.');
       } else {
-        log(`Error during search: ${e.message}`, 'error');
+        log(describeSearchError(e), 'error');
         setStatus('Search stopped on an error.');
       }
     } finally {

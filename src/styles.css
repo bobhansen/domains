@@ -812,7 +812,8 @@ button:focus-visible {
 }
 
 .verdict-ok,
-.verdict-no {
+.verdict-no,
+.verdict-ask {
   font-size: 0.85rem;
   font-weight: 700;
   line-height: 1;
@@ -820,6 +821,7 @@ button:focus-visible {
 
 .verdict-ok { color: var(--sage); }
 .verdict-no { color: var(--muted); }
+.verdict-ask { color: var(--copper-bright); }
 
 .loader {
   display: inline-block;

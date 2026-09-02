@@ -3,8 +3,7 @@ import { html } from '../html.js';
 
 const HOLD_MS = 2000;
 
-export default function Stats({ found, checked, onLocaleDebug }) {
-  const rate = checked ? `${((found / checked) * 100).toFixed(1)}%` : '—';
+function useHold(onFire) {
   const timerRef = useRef(null);
 
   function clearHold() {
@@ -19,9 +18,23 @@ export default function Stats({ found, checked, onLocaleDebug }) {
     clearHold();
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      onLocaleDebug();
+      onFire();
     }, HOLD_MS);
   }
+
+  return {
+    onPointerDown: startHold,
+    onPointerUp: clearHold,
+    onPointerCancel: clearHold,
+    onPointerLeave: clearHold,
+    onContextMenu: (e) => e.preventDefault(),
+  };
+}
+
+export default function Stats({ found, checked, onLocaleDebug, onLayoutDebug }) {
+  const rate = checked ? `${((found / checked) * 100).toFixed(1)}%` : '—';
+  const localeHold = useHold(onLocaleDebug);
+  const layoutHold = useHold(onLayoutDebug);
 
   return html`
     <dl className="stats">
@@ -29,18 +42,11 @@ export default function Stats({ found, checked, onLocaleDebug }) {
         <dt>Found</dt>
         <dd className="found">${found}</dd>
       </div>
-      <div>
+      <div className="stats-hit" ...${layoutHold}>
         <dt>Checked</dt>
         <dd>${checked}</dd>
       </div>
-      <div
-        className="stats-hit"
-        onPointerDown=${startHold}
-        onPointerUp=${clearHold}
-        onPointerCancel=${clearHold}
-        onPointerLeave=${clearHold}
-        onContextMenu=${(e) => e.preventDefault()}
-      >
+      <div className="stats-hit" ...${localeHold}>
         <dt>Hit rate</dt>
         <dd>${rate}</dd>
       </div>

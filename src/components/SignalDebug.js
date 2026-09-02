@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { html } from '../html.js';
-import { formatLanguageDetectionReport, inspectLanguageDetection } from '../lib/languages.js';
-import { SETTINGS_KEY } from '../lib/settings.js';
 
 async function copyText(text) {
   try {
@@ -28,24 +26,7 @@ async function copyText(text) {
   }
 }
 
-function storedSnapshot() {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw == null) return { storedJson: '(absent)', storedLanguage: '' };
-    let language = '';
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.language) language = String(parsed.language);
-    } catch {
-      language = '';
-    }
-    return { storedJson: raw, storedLanguage: language };
-  } catch {
-    return { storedJson: '(error reading localStorage)', storedLanguage: '' };
-  }
-}
-
-export default function LocaleDebug({ open, onClose, currentLanguage }) {
+export default function SignalDebug({ open, onClose, title, buildReport }) {
   const dialogRef = useRef(null);
   const [report, setReport] = useState('');
   const [copyState, setCopyState] = useState('');
@@ -66,13 +47,12 @@ export default function LocaleDebug({ open, onClose, currentLanguage }) {
       setCopyState('');
       return undefined;
     }
-    const inspect = inspectLanguageDetection();
-    const stored = storedSnapshot();
-    const text = formatLanguageDetectionReport(inspect, {
-      currentLanguage,
-      storedLanguage: stored.storedLanguage,
-      storedJson: stored.storedJson,
-    });
+    let text = '';
+    try {
+      text = String(buildReport() || '');
+    } catch (err) {
+      text = `Failed to build report: ${err && err.message ? err.message : err}`;
+    }
     setReport(text);
     let cancelled = false;
     copyText(text).then((ok) => {
@@ -81,7 +61,7 @@ export default function LocaleDebug({ open, onClose, currentLanguage }) {
     return () => {
       cancelled = true;
     };
-  }, [open, currentLanguage]);
+  }, [open, buildReport]);
 
   function onDialogClick(e) {
     if (e.target === dialogRef.current) onClose();
@@ -99,7 +79,7 @@ export default function LocaleDebug({ open, onClose, currentLanguage }) {
       onCancel=${onClose}
       onClick=${onDialogClick}
     >
-      <h3>Language signals</h3>
+      <h3>${title}</h3>
       <p className="locale-debug-status">
         ${copyState === 'copied' ? 'Copied to the clipboard.'
           : copyState === 'failed' ? 'Could not copy automatically — use the button.'
