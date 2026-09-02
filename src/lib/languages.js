@@ -47,7 +47,6 @@ export const LANGUAGES = [
 ];
 
 export const DEFAULT_LANGUAGE = 'en';
-export const LANGUAGE_STORAGE_KEY = 'vanity_language';
 
 const byCode = new Map(LANGUAGES.map((lang) => [lang.code, lang]));
 
@@ -77,21 +76,3 @@ export function filterLanguages(query) {
   return LANGUAGES.filter((lang) => fold(lang.name).includes(q) || lang.code.toLowerCase().includes(q));
 }
 
-export function readStoredLanguage() {
-  try {
-    const code = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-    if (isKnownLanguage(code)) return code;
-  } catch {
-    /* private mode */
-  }
-  return DEFAULT_LANGUAGE;
-}
-
-export function storeLanguage(code) {
-  if (!isKnownLanguage(code)) return;
-  try {
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, code);
-  } catch {
-    /* quota or private mode */
-  }
-}

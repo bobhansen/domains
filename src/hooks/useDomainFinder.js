@@ -3,13 +3,9 @@ import { MarkovGenerator } from '../lib/markov.js';
 import { loadValidTlds } from '../lib/tlds.js';
 import { expectedHitRate } from '../lib/hitRates.js';
 import { LIMITS, clampInt, clampSettings, snapShortBias } from '../lib/limits.js';
-import { resolvedTld, validateTld } from '../lib/tld.js';
-import {
-  isKnownLanguage,
-  languageByCode,
-  readStoredLanguage,
-  storeLanguage,
-} from '../lib/languages.js';
+import { TLD_CHIPS, resolvedTld, validateTld } from '../lib/tld.js';
+import { isKnownLanguage, languageByCode } from '../lib/languages.js';
+import { readStoredSettings, storeSettings } from '../lib/settings.js';
 import {
   DNS_CONCURRENCY,
   RDAP_CONCURRENCY,
@@ -24,7 +20,7 @@ import { isAbortError, sleep } from '../lib/pool.js';
 const LOG_CAP = 220;
 const CUSTOM_TLD_DEBOUNCE_MS = 400;
 
-export const TLD_CHIPS = ['com', 'org', 'net', 'me', 'io', 'co', 'ai', 'app', 'custom'];
+export { TLD_CHIPS };
 
 export function useDomainFinder() {
   const [busy, setBusy] = useState(false);
@@ -35,14 +31,15 @@ export function useDomainFinder() {
   const [checked, setChecked] = useState(0);
   const [capacity, setCapacityState] = useState(0);
 
-  const [language, setLanguageState] = useState(readStoredLanguage);
+  const [initial] = useState(readStoredSettings);
+  const [language, setLanguageState] = useState(initial.language);
   const [modelLang, setModelLang] = useState(null);
   const [bootReady, setBootReady] = useState(false);
-  const [tldChoice, setTldChoice] = useState('org');
-  const [customTld, setCustomTld] = useState('');
-  const [minLen, setMinLen] = useState(LIMITS.length.minFallback);
-  const [maxLen, setMaxLen] = useState(LIMITS.length.maxFallback);
-  const [shortBias, setShortBias] = useState(LIMITS.shortBias.fallback);
+  const [tldChoice, setTldChoice] = useState(initial.tldChoice);
+  const [customTld, setCustomTld] = useState(initial.customTld);
+  const [minLen, setMinLen] = useState(initial.minLen);
+  const [maxLen, setMaxLen] = useState(initial.maxLen);
+  const [shortBias, setShortBias] = useState(initial.shortBias);
 
   const generatorRef = useRef(null);
   const validTldsRef = useRef(new Set());
@@ -70,6 +67,10 @@ export function useDomainFinder() {
   logFnRef.current = log;
   settingsRef.current = { tldChoice, customTld, minLen, maxLen, shortBias, language };
   const ready = bootReady && modelLang === language;
+
+  useEffect(() => {
+    storeSettings({ language, tldChoice, customTld, minLen, maxLen, shortBias });
+  }, [language, tldChoice, customTld, minLen, maxLen, shortBias]);
 
   const setCapacity = useCallback((n) => {
     const cap = Math.max(0, Math.min(LIMITS.target.max, Math.round(Number(n) || 0)));
@@ -567,7 +568,6 @@ export function useDomainFinder() {
 
   function setLanguage(code) {
     if (!isKnownLanguage(code) || code === language) return;
-    storeLanguage(code);
     setLanguageState(code);
   }
 

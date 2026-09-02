@@ -1,3 +1,5 @@
+export const TLD_CHIPS = ['com', 'org', 'net', 'me', 'io', 'co', 'ai', 'app', 'custom'];
+
 export function normalizeTld(raw) {
   return String(raw || '').trim().toLowerCase().replace(/^\.+/, '').replace(/\.+$/, '');
 }
