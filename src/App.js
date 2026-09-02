@@ -10,6 +10,7 @@ import About from './components/About.js';
 import SignalDebug from './components/SignalDebug.js';
 import ResultsGrid from './components/ResultsGrid.js';
 import StageTld from './components/StageTld.js';
+import SnailPace from './components/SnailPace.js';
 
 function storedLanguageSnapshot() {
   try {
@@ -209,6 +210,7 @@ export default function App() {
           </button>
         </div>
       </div>
+      <${SnailPace} compact=${compact} />
       <${SignalDebug}
         open=${localeDebugOpen}
         onClose=${() => setLocaleDebugOpen(false)}

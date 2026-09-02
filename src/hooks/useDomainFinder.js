@@ -9,6 +9,7 @@ import { readStoredSettings, storeSettings } from '../lib/settings.js';
 import {
   DNS_CONCURRENCY,
   abortInFlightRequests,
+  clearRdapPushback,
   dnsLooksUndelegated,
   initRdapBootstrap,
   rdapIsUnregistered,
@@ -112,6 +113,7 @@ export function useDomainFinder() {
   const abortCurrent = useCallback(() => {
     abortRef.current?.abort();
     abortInFlightRequests();
+    clearRdapPushback();
   }, []);
 
   const preemptRun = useCallback(() => {
@@ -178,6 +180,7 @@ export function useDomainFinder() {
       if (foundRef.current.length >= capacityRef.current) return;
     } else {
       preemptRun();
+      clearRdapPushback();
       foundRef.current = [];
       checkedHistoryRef.current = new Set();
       nextIdRef.current = 0;

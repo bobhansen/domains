@@ -38,7 +38,7 @@ function parseRetryAfterMs(res) {
   return null;
 }
 
-const DEFAULT_COOLDOWN_MS = 2_000;
+const DEFAULT_COOLDOWN_MS = 5_000;
 
 function isBackoffStatus(status) {
   return status === 429 || status === 403 || status === 503;
@@ -98,6 +98,9 @@ function createServiceGate(initialConcurrency) {
         `We're pausing domain validations because we're sending too many requests and getting errors. Waiting for ${secs} seconds.`,
       );
     }
+    if (!isDnsLookupHost(host) && (status === 429 || status === 403)) {
+      noteRdapPushback(host, coolUntil);
+    }
     pump();
   }
 
@@ -122,6 +125,75 @@ function createServiceGate(initialConcurrency) {
 }
 
 const hostGates = new Map();
+
+const rdapPushback = {
+  hosts: new Set(),
+  until: 0,
+  tickTimer: null,
+  listeners: new Set(),
+};
+
+function emitRdapPushback() {
+  const until = rdapPushback.until;
+  const active = rdapPushback.hosts.size > 0;
+  for (const fn of rdapPushback.listeners) {
+    try {
+      fn({ active, until });
+    } catch {
+      /* listener errors should not break backoff */
+    }
+  }
+}
+
+function armPushbackTick(until) {
+  if (rdapPushback.tickTimer) {
+    clearTimeout(rdapPushback.tickTimer);
+    rdapPushback.tickTimer = null;
+  }
+  const wait = until - Date.now();
+  if (wait <= 0) return;
+  rdapPushback.tickTimer = setTimeout(() => {
+    rdapPushback.tickTimer = null;
+    emitRdapPushback();
+  }, wait);
+}
+
+function noteRdapPushback(host, until) {
+  rdapPushback.hosts.add(host);
+  rdapPushback.until = Math.max(rdapPushback.until, until);
+  armPushbackTick(rdapPushback.until);
+  emitRdapPushback();
+}
+
+function noteRdapRecovered(host) {
+  if (!rdapPushback.hosts.size) return;
+  rdapPushback.hosts.delete(host);
+  if (!rdapPushback.hosts.size) {
+    rdapPushback.until = 0;
+    if (rdapPushback.tickTimer) {
+      clearTimeout(rdapPushback.tickTimer);
+      rdapPushback.tickTimer = null;
+    }
+  }
+  emitRdapPushback();
+}
+
+export function clearRdapPushback() {
+  if (!rdapPushback.hosts.size && !rdapPushback.until) return;
+  rdapPushback.hosts.clear();
+  rdapPushback.until = 0;
+  if (rdapPushback.tickTimer) {
+    clearTimeout(rdapPushback.tickTimer);
+    rdapPushback.tickTimer = null;
+  }
+  emitRdapPushback();
+}
+
+export function subscribeRdapPushback(fn) {
+  rdapPushback.listeners.add(fn);
+  fn({ active: rdapPushback.hosts.size > 0, until: rdapPushback.until });
+  return () => rdapPushback.listeners.delete(fn);
+}
 
 export function abortInFlightRequests() {
   const err = abortError();
@@ -150,6 +222,9 @@ async function fetchHonoringRateLimit(url, options, concurrency, log, signal) {
           const hinted = parseRetryAfterMs(res);
           gate.cooldown(hinted != null ? hinted : DEFAULT_COOLDOWN_MS, log, host, res.status);
           return { ok: false, res };
+        }
+        if (!isDnsLookupHost(host) && (res.status === 200 || res.status === 404)) {
+          noteRdapRecovered(host);
         }
         return { ok: true, res };
       } catch (e) {

@@ -15,6 +15,7 @@
   --sans: "Satoshi", system-ui, sans-serif;
   --mono: "Cascadia Code", "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --radius: 16px;
+  --chit-row-height: 5.5rem;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
@@ -701,7 +702,6 @@ button:focus-visible {
 
 .results-grid {
   --chit-min-width: 11.5rem;
-  --chit-row-height: 5.5rem;
   min-width: 0;
   display: grid;
   gap: 0.75rem;
@@ -1048,6 +1048,87 @@ button:focus-visible {
 
 .app.is-compact .dock-start.is-stop {
   background: var(--panel);
+}
+
+.snail-pace {
+  position: fixed;
+  right: max(0.65rem, var(--safe-right));
+  bottom: max(0.65rem, var(--safe-bottom));
+  z-index: 18;
+}
+
+.snail-pace-btn {
+  appearance: none;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.snail-pace-btn img {
+  display: block;
+  height: var(--chit-row-height);
+  width: auto;
+  opacity: 0.62;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.snail-pace.is-open .snail-pace-btn img,
+.snail-pace-btn:hover img,
+.snail-pace-btn:focus-visible img {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.snail-pace-btn:focus-visible {
+  outline: 2px solid var(--copper);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.snail-pace-tip {
+  position: absolute;
+  right: 0;
+  left: auto;
+  bottom: calc(100% + 0.55rem);
+  width: min(19rem, calc(100vw - 1.5rem));
+  padding: 0.75rem 0.85rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.snail-pace-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--paper);
+}
+
+.snail-pace-tip p {
+  margin: 0 0 0.45rem;
+}
+
+.snail-pace-tip p:last-child {
+  margin-bottom: 0;
+}
+
+.snail-pace-wait {
+  color: var(--copper-bright);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.snail-pace.is-compact {
+  bottom: calc(4.4rem + var(--safe-bottom));
 }
 
 .app.is-compact.sheet-open .sheet-dock { display: none; }
