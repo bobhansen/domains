@@ -6,12 +6,12 @@ export const LENGTH_PRESETS = [
   { id: 'longer', label: 'Longer', bias: 0.1 },
 ];
 
-const SHORT_PRESET = LENGTH_PRESETS.find((p) => p.id === 'short');
+const NORMAL_PRESET = LENGTH_PRESETS.find((p) => p.id === 'normal');
 
 export const LIMITS = {
   target: { min: 1, max: 250, fallback: 20 },
   length: { min: 3, max: 20, minFallback: 4, maxFallback: 8 },
-  shortBias: { min: 0.1, max: 1000, fallback: SHORT_PRESET.bias },
+  shortBias: { min: 0.1, max: 1000, fallback: NORMAL_PRESET.bias },
 };
 
 export function clampInt(value, min, max, fallback) {
