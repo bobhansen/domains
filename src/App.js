@@ -205,7 +205,7 @@ export default function App() {
             aria-controls="search-settings"
             onClick=${() => setSheetOpen((open) => !open)}
           >
-            ${sheetOpen ? 'Close' : 'Tune search'}
+            ${sheetOpen ? 'Close' : 'Settings'}
           </button>
           <button
             type="button"
@@ -213,7 +213,8 @@ export default function App() {
             disabled=${!finder.ready}
             onClick=${startSearch}
           >
-            ${!finder.ready ? 'Loading…' : finder.busy ? 'Stop' : 'Refresh'}
+            <span className="dock-start-sizer" aria-hidden="true">Refresh</span>
+            <span className="dock-start-text">${!finder.ready ? 'Loading…' : finder.busy ? 'Stop' : 'Refresh'}</span>
           </button>
         </div>
       </div>

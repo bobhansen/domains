@@ -1062,12 +1062,33 @@ button:focus-visible {
 }
 
 .app.is-compact .dock-start {
+  display: inline-grid;
+  justify-items: center;
+  align-items: center;
   width: auto;
   margin: 0;
   min-height: 2.85rem;
   padding: 0.7rem 1.2rem;
   border-radius: 999px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+.app.is-compact .dock-start-sizer,
+.app.is-compact .dock-start-text {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+.app.is-compact .dock-start-sizer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app.is-compact .dock-start-text {
+  justify-self: stretch;
+  width: 0;
+  min-width: 100%;
+  text-align: center;
 }
 
 .app.is-compact .dock-start.is-stop {
