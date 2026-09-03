@@ -1,7 +1,7 @@
 import { getCache, setCache } from './cache.js';
 import { languageByCode, localeForLanguage } from './languages.js';
 
-const MODEL_VERSION = 'g3v2';
+const MODEL_VERSION = 'wiki1';
 
 function getSegmenter(locale) {
   if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') return null;

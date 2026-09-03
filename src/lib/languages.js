@@ -1,73 +1,38 @@
-export const LANGUAGES = [
-  { code: 'af', name: 'Afrikaans', path: 'dicts/af.csv' },
-  { code: 'bg', name: 'Български', path: 'dicts/bg.csv' },
-  { code: 'br', name: 'Brezhoneg', path: 'dicts/br.csv' },
-  { code: 'bs', name: 'Bosanski', path: 'dicts/bs.csv' },
-  { code: 'ca', name: 'Català', path: 'dicts/ca.csv' },
-  { code: 'cs', name: 'Čeština', path: 'dicts/cs.csv' },
-  { code: 'da', name: 'Dansk', path: 'dicts/da.csv' },
-  { code: 'de', name: 'Deutsch', path: 'dicts/de.csv' },
-  { code: 'el', name: 'Ελληνικά', path: 'dicts/el.csv' },
-  { code: 'en', name: 'English', path: 'dicts/en.csv' },
-  { code: 'eo', name: 'Esperanto', path: 'dicts/eo.csv' },
-  { code: 'es', name: 'Español', path: 'dicts/es.csv' },
-  { code: 'et', name: 'Eesti', path: 'dicts/et.csv' },
-  { code: 'eu', name: 'Euskara', path: 'dicts/eu.csv' },
-  { code: 'fi', name: 'Suomi', path: 'dicts/fi.csv' },
-  { code: 'fr', name: 'Français', path: 'dicts/fr.csv' },
-  { code: 'gl', name: 'Galego', path: 'dicts/gl.csv' },
-  { code: 'hr', name: 'Hrvatski', path: 'dicts/hr.csv' },
-  { code: 'hu', name: 'Magyar', path: 'dicts/hu.csv' },
-  { code: 'hy', name: 'Հայերեն', path: 'dicts/hy.csv' },
-  { code: 'id', name: 'Bahasa Indonesia', path: 'dicts/id.csv' },
-  { code: 'is', name: 'Íslenska', path: 'dicts/is.csv' },
-  { code: 'it', name: 'Italiano', path: 'dicts/it.csv' },
-  { code: 'ka', name: 'ქართული', path: 'dicts/ka.csv' },
-  { code: 'kk', name: 'Қазақша', path: 'dicts/kk.csv' },
-  { code: 'lt', name: 'Lietuvių', path: 'dicts/lt.csv' },
-  { code: 'lv', name: 'Latviešu', path: 'dicts/lv.csv' },
-  { code: 'mk', name: 'Македонски', path: 'dicts/mk.csv' },
-  { code: 'ms', name: 'Bahasa Melayu', path: 'dicts/ms.csv' },
-  { code: 'nl', name: 'Nederlands', path: 'dicts/nl.csv' },
-  { code: 'no', name: 'Norsk', path: 'dicts/no.csv' },
-  { code: 'pl', name: 'Polski', path: 'dicts/pl.csv' },
-  { code: 'pt', name: 'Português', path: 'dicts/pt.csv' },
-  { code: 'pt_br', name: 'Português (Brasil)', path: 'dicts/pt_br.csv' },
-  { code: 'ro', name: 'Română', path: 'dicts/ro.csv' },
-  { code: 'ru', name: 'Русский', path: 'dicts/ru.csv' },
-  { code: 'sk', name: 'Slovenčina', path: 'dicts/sk.csv' },
-  { code: 'sl', name: 'Slovenščina', path: 'dicts/sl.csv' },
-  { code: 'sq', name: 'Shqip', path: 'dicts/sq.csv' },
-  { code: 'sr', name: 'Srpski', path: 'dicts/sr.csv' },
-  { code: 'sv', name: 'Svenska', path: 'dicts/sv.csv' },
-  { code: 'tl', name: 'Tagalog', path: 'dicts/tl.csv' },
-  { code: 'tr', name: 'Türkçe', path: 'dicts/tr.csv' },
-  { code: 'uk', name: 'Українська', path: 'dicts/uk.csv' },
-  { code: 'vi', name: 'Tiếng Việt', path: 'dicts/vi.csv' },
-];
+import { LANGUAGES } from './languageCatalog.js';
+
+export { LANGUAGES };
 
 export const DEFAULT_LANGUAGE = 'en';
 
 const byCode = new Map(LANGUAGES.map((lang) => [lang.code, lang]));
 
 const LANGUAGE_ALIASES = {
-  nb: 'no',
-  nn: 'no',
+  no: 'nb',
+  pt_br: 'pt',
   fil: 'tl',
   in: 'id',
 };
 
+export function canonicalizeLanguage(code) {
+  const raw = String(code || '').trim().replace(/-/g, '_').toLowerCase();
+  if (!raw) return null;
+  if (byCode.has(raw)) return raw;
+  const alias = LANGUAGE_ALIASES[raw];
+  if (alias && byCode.has(alias)) return alias;
+  return null;
+}
+
 export function isKnownLanguage(code) {
-  return byCode.has(code);
+  return canonicalizeLanguage(code) != null;
 }
 
 export function languageByCode(code) {
-  return byCode.get(code) || byCode.get(DEFAULT_LANGUAGE);
+  return byCode.get(canonicalizeLanguage(code) || DEFAULT_LANGUAGE);
 }
 
 export function localeForLanguage(code) {
-  if (code === 'pt_br') return 'pt-BR';
-  return code || 'en';
+  const spec = languageByCode(code);
+  return spec.code.replace(/_/g, '-');
 }
 
 function interpretTag(tag) {
@@ -80,20 +45,11 @@ function interpretTag(tag) {
   const attempts = [];
   for (let n = parts.length; n >= 1; n--) {
     const code = parts.slice(0, n).join('_');
-    if (isKnownLanguage(code)) {
-      attempts.push({ tried: code, result: 'exact' });
-      return { raw, normalized: bcp, matched: code, via: 'exact', attempts };
-    }
-    const alias = LANGUAGE_ALIASES[code];
-    if (alias && isKnownLanguage(alias)) {
-      attempts.push({ tried: code, result: `alias:${alias}` });
-      return {
-        raw,
-        normalized: bcp,
-        matched: alias,
-        via: `alias ${code} → ${alias}`,
-        attempts,
-      };
+    const matched = canonicalizeLanguage(code);
+    if (matched) {
+      const via = matched === code ? 'exact' : `alias ${code} → ${matched}`;
+      attempts.push({ tried: code, result: matched === code ? 'exact' : `alias:${matched}` });
+      return { raw, normalized: bcp, matched, via, attempts };
     }
     attempts.push({ tried: code, result: 'miss' });
   }
@@ -180,7 +136,7 @@ export function inspectLanguageDetection() {
 }
 
 export function languageFromBrowser() {
-  return inspectLanguageDetection().detected;
+  return canonicalizeLanguage(inspectLanguageDetection().detected) || DEFAULT_LANGUAGE;
 }
 
 function dumpSlot(slot) {
@@ -285,6 +241,10 @@ function fold(value) {
 export function filterLanguages(query) {
   const q = fold(query).trim();
   if (!q) return LANGUAGES;
-  return LANGUAGES.filter((lang) => fold(lang.name).includes(q) || lang.code.toLowerCase().includes(q));
+  return LANGUAGES.filter((lang) => (
+    fold(lang.name).includes(q)
+    || fold(lang.english).includes(q)
+    || lang.code.toLowerCase().includes(q)
+  ));
 }
 

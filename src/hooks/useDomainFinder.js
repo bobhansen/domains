@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { MarkovGenerator } from '../lib/markov.js';
 import { loadValidTlds } from '../lib/tlds.js';
 import { expectedHitRate } from '../lib/hitRates.js';
-import { LIMITS, clampInt, clampSettings, snapShortBias } from '../lib/limits.js';
+import { LIMITS, clampInt, clampSettings, lengthPresetFor, snapShortBias } from '../lib/limits.js';
 import { TLD_CHIPS, resolvedTld, validateTld } from '../lib/tld.js';
-import { isKnownLanguage, languageByCode } from '../lib/languages.js';
-import { readStoredSettings, storeSettings } from '../lib/settings.js';
+import { canonicalizeLanguage, languageByCode } from '../lib/languages.js';
+import { readInitialSettings, storeSettings, writeSettingsParam, writeTldParam } from '../lib/settings.js';
 import {
   DNS_CONCURRENCY,
   dropQueuedDns,
@@ -42,12 +42,12 @@ export function useDomainFinder() {
   const [checked, setChecked] = useState(0);
   const [capacity, setCapacityState] = useState(0);
 
-  const [initial] = useState(readStoredSettings);
+  const [initial] = useState(readInitialSettings);
   const [language, setLanguageState] = useState(initial.language);
   const [modelLang, setModelLang] = useState(null);
   const [bootReady, setBootReady] = useState(false);
-  const [tldChoice, setTldChoice] = useState(initial.tldChoice);
-  const [customTld, setCustomTld] = useState(initial.customTld);
+  const [tldChoice, setTldChoiceState] = useState(initial.tldChoice);
+  const [customTld, setCustomTldState] = useState(initial.customTld);
   const [minLen, setMinLen] = useState(initial.minLen);
   const [maxLen, setMaxLen] = useState(initial.maxLen);
   const [shortBias, setShortBias] = useState(initial.shortBias);
@@ -637,23 +637,40 @@ export function useDomainFinder() {
 
   function commitMinLen(raw) {
     const minL = clampInt(raw, LIMITS.length.min, LIMITS.length.max, LIMITS.length.minFallback);
+    if (minL !== minLen) writeSettingsParam('min', minL);
     setMinLen(minL);
     setMaxLen((maxL) => Math.max(minL, clampInt(maxL, LIMITS.length.min, LIMITS.length.max, LIMITS.length.maxFallback)));
   }
 
   function commitMaxLen(raw) {
     const maxL = clampInt(raw, LIMITS.length.min, LIMITS.length.max, LIMITS.length.maxFallback);
+    if (maxL !== maxLen) writeSettingsParam('max', maxL);
     setMaxLen(maxL);
     setMinLen((minL) => Math.min(maxL, clampInt(minL, LIMITS.length.min, LIMITS.length.max, LIMITS.length.minFallback)));
   }
 
   function commitShortBias(raw) {
-    setShortBias(snapShortBias(raw));
+    const bias = snapShortBias(raw);
+    if (bias !== shortBias) writeSettingsParam('mix', lengthPresetFor(bias).id);
+    setShortBias(bias);
   }
 
   function setLanguage(code) {
-    if (!isKnownLanguage(code) || code === language) return;
-    setLanguageState(code);
+    const resolved = canonicalizeLanguage(code);
+    if (!resolved || resolved === language) return;
+    writeSettingsParam('lang', resolved);
+    setLanguageState(resolved);
+  }
+
+  function setTldChoice(choice) {
+    if (!TLD_CHIPS.includes(choice) || choice === tldChoice) return;
+    writeTldParam(choice, customTld);
+    setTldChoiceState(choice);
+  }
+
+  function setCustomTld(value) {
+    writeTldParam('custom', value);
+    setCustomTldState(value);
   }
 
   const validateCustomTld = useCallback((raw) => validateTld(raw, validTldsRef.current), []);
