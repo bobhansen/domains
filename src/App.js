@@ -39,7 +39,7 @@ export default function App() {
   const [resetOpen, setResetOpen] = useState(false);
   const appRef = useRef(null);
   const railRef = useRef(null);
-  const chromeRef = useRef(0);
+  const layoutCacheRef = useRef({});
 
   useEffect(() => {
     document.body.style.overflow = sheetOpen ? 'hidden' : '';
@@ -62,8 +62,8 @@ export default function App() {
     const rail = railRef.current;
 
     function update() {
-      const next = shouldUseCompactLayout(rail, chromeRef.current);
-      chromeRef.current = next.chrome || chromeRef.current;
+      const next = shouldUseCompactLayout(rail, app, layoutCacheRef.current);
+      layoutCacheRef.current = next.cache;
       setCompact(next.compact);
     }
 
@@ -71,7 +71,11 @@ export default function App() {
     const ro = new ResizeObserver(update);
     if (app) ro.observe(app);
     if (rail) ro.observe(rail);
+    const controls = rail && rail.querySelector('.controls');
+    if (controls) ro.observe(controls);
     window.addEventListener('resize', update);
+    const fonts = document.fonts;
+    if (fonts && fonts.ready) fonts.ready.then(update).catch(() => {});
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', update);
@@ -97,7 +101,7 @@ export default function App() {
       rail: railRef.current,
       app: appRef.current,
       compact,
-      cachedChrome: chromeRef.current,
+      cache: layoutCacheRef.current,
     })),
     [compact],
   );
