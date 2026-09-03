@@ -13,7 +13,7 @@
   --focus: rgba(201, 146, 74, 0.35);
   --display: "Boska", Palatino, "Palatino Linotype", serif;
   --sans: "Satoshi", system-ui, sans-serif;
-  --mono: "Cascadia Code", "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --radius: 16px;
   --chit-row-height: 5.5rem;
   --safe-top: env(safe-area-inset-top, 0px);
