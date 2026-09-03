@@ -497,6 +497,28 @@ button:focus-visible {
   color: var(--copper-bright);
 }
 
+.reset-dialog-clear {
+  appearance: none;
+  margin: 0.5rem 0 0;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  background: var(--danger);
+  color: #1a130c;
+  font: 500 0.875rem/1.2 var(--sans);
+  cursor: pointer;
+}
+
+.reset-dialog-clear:hover {
+  filter: brightness(1.08);
+}
+
+.reset-dialog-clear:disabled,
+.about-dialog-close:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .log-window {
   flex: 1 1 auto;
   min-height: 0;

@@ -18,7 +18,7 @@ function useHold(onFire) {
     clearHold();
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
-      onFire();
+      onFire?.();
     }, HOLD_MS);
   }
 
@@ -31,14 +31,15 @@ function useHold(onFire) {
   };
 }
 
-export default function Stats({ found, checked, onLocaleDebug, onLayoutDebug }) {
+export default function Stats({ found, checked, onLocaleDebug, onLayoutDebug, onReset }) {
   const rate = checked ? `${((found / checked) * 100).toFixed(1)}%` : '—';
   const localeHold = useHold(onLocaleDebug);
   const layoutHold = useHold(onLayoutDebug);
+  const resetHold = useHold(onReset);
 
   return html`
     <dl className="stats">
-      <div>
+      <div className="stats-hit" ...${resetHold}>
         <dt>Found</dt>
         <dd className="found">${found}</dd>
       </div>

@@ -11,6 +11,7 @@ import SignalDebug from './components/SignalDebug.js';
 import ResultsGrid from './components/ResultsGrid.js';
 import StageTld from './components/StageTld.js';
 import SnailPace from './components/SnailPace.js';
+import ResetDialog from './components/ResetDialog.js';
 
 function storedLanguageSnapshot() {
   try {
@@ -35,6 +36,7 @@ export default function App() {
   const [compact, setCompact] = useState(() => window.innerWidth <= NARROW_PX);
   const [localeDebugOpen, setLocaleDebugOpen] = useState(false);
   const [layoutDebugOpen, setLayoutDebugOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const appRef = useRef(null);
   const railRef = useRef(null);
   const chromeRef = useRef(0);
@@ -165,6 +167,7 @@ export default function App() {
             checked=${finder.checked}
             onLocaleDebug=${() => setLocaleDebugOpen(true)}
             onLayoutDebug=${() => setLayoutDebugOpen(true)}
+            onReset=${() => setResetOpen(true)}
           />
         </aside>
 
@@ -211,6 +214,10 @@ export default function App() {
         </div>
       </div>
       <${SnailPace} compact=${compact} />
+      <${ResetDialog}
+        open=${resetOpen}
+        onClose=${() => setResetOpen(false)}
+      />
       <${SignalDebug}
         open=${localeDebugOpen}
         onClose=${() => setLocaleDebugOpen(false)}

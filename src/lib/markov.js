@@ -100,7 +100,7 @@ export class MarkovGenerator {
   }
 
   cacheKey(code) {
-    return `markov_model_${MODEL_VERSION}_${code}`;
+    return `markov_${MODEL_VERSION}_${code}`;
   }
 
   applyCache(cached) {

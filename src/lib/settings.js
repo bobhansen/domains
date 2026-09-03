@@ -1,9 +1,10 @@
 import { DEFAULT_LANGUAGE, canonicalizeLanguage, isKnownLanguage, languageFromBrowser } from './languages.js';
 import { LIMITS, LENGTH_PRESETS, clampSettings } from './limits.js';
 import { TLD_CHIPS, normalizeTld, validateTld } from './tld.js';
+import { storageFrozen, storageKey } from './storage.js';
 
-export const SETTINGS_KEY = 'vanity_settings';
-const LEGACY_LANGUAGE_KEY = 'vanity_language';
+export const SETTINGS_KEY = storageKey('settings');
+const LEGACY_LANGUAGE_KEY = storageKey('language');
 
 const URL_KEYS = ['lang', 'tld', 'min', 'max', 'mix'];
 
@@ -70,6 +71,7 @@ function tldParamValue(tldChoice, customTld) {
 
 export function writeSettingsParam(key, value) {
   try {
+    if (storageFrozen()) return;
     if (typeof window === 'undefined' || !window.history || !window.location) return;
     if (!URL_KEYS.includes(key)) return;
     const nextVal = String(value);
@@ -114,6 +116,7 @@ export function readInitialSettings() {
 }
 
 export function storeSettings(settings) {
+  if (storageFrozen()) return;
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(sanitizeSettings(settings)));
     localStorage.removeItem(LEGACY_LANGUAGE_KEY);

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { html } from '../html.js';
 import Stats from './Stats.js';
 
-export default function ActivityLog({ logs, found, checked, onLocaleDebug, onLayoutDebug }) {
+export default function ActivityLog({ logs, found, checked, onLocaleDebug, onLayoutDebug, onReset }) {
   const scroller = useRef(null);
 
   useEffect(() => {
@@ -28,6 +28,7 @@ export default function ActivityLog({ logs, found, checked, onLocaleDebug, onLay
         checked=${checked}
         onLocaleDebug=${onLocaleDebug}
         onLayoutDebug=${onLayoutDebug}
+        onReset=${onReset}
       />
     </section>
   `;
