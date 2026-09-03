@@ -44,8 +44,16 @@ function isBackoffStatus(status) {
   return status === 429 || status === 403 || status === 503;
 }
 
+function isUnavailableStatus(status) {
+  return status === 500 || status === 502 || status === 504;
+}
+
 function isDnsLookupHost(host) {
   return /(^|\.)cloudflare-dns\.com$/i.test(host);
+}
+
+function outageKind(host) {
+  return isDnsLookupHost(host) ? 'dns' : 'rdap';
 }
 
 function createServiceGate(initialConcurrency) {
@@ -195,6 +203,107 @@ export function subscribeRdapPushback(fn) {
   return () => rdapPushback.listeners.delete(fn);
 }
 
+const OUTAGE_STREAK = 2;
+const PROBE_TTL_MS = 15_000;
+
+const serviceOutage = {
+  dnsHosts: new Set(),
+  rdapHosts: new Set(),
+  listeners: new Set(),
+  streaks: new Map(),
+  logged: new Set(),
+};
+
+const probeCache = new Map();
+const probeInflight = new Map();
+
+function outageSnapshot() {
+  const dns = serviceOutage.dnsHosts.size > 0;
+  const rdap = serviceOutage.rdapHosts.size > 0;
+  return { active: dns || rdap, dns, rdap };
+}
+
+function emitServiceOutage() {
+  const payload = outageSnapshot();
+  for (const fn of serviceOutage.listeners) {
+    try {
+      fn(payload);
+    } catch {
+      /* listener errors should not break lookups */
+    }
+  }
+}
+
+function hostSet(kind) {
+  return kind === 'dns' ? serviceOutage.dnsHosts : serviceOutage.rdapHosts;
+}
+
+function noteServiceOutage(host, kind, log) {
+  const set = hostSet(kind);
+  if (set.has(host)) return;
+  set.add(host);
+  if (!serviceOutage.logged.has(host)) {
+    serviceOutage.logged.add(host);
+    if (kind === 'dns') {
+      log?.("We can't reach Cloudflare's name lookup right now.", 'error');
+    } else {
+      log?.("We can't reach the registry's confirmation service right now.", 'error');
+    }
+  }
+  emitServiceOutage();
+}
+
+function noteServiceRecovered(host) {
+  serviceOutage.streaks.delete(host);
+  let changed = false;
+  if (serviceOutage.dnsHosts.delete(host)) changed = true;
+  if (serviceOutage.rdapHosts.delete(host)) changed = true;
+  if (changed) emitServiceOutage();
+}
+
+function bumpOutageStreak(host) {
+  const n = (serviceOutage.streaks.get(host) || 0) + 1;
+  serviceOutage.streaks.set(host, n);
+  return n;
+}
+
+async function hostLooksUnreachable(url, signal) {
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return true;
+  }
+  const cached = probeCache.get(host);
+  if (cached && Date.now() - cached.at < PROBE_TTL_MS) return cached.unreachable;
+  if (probeInflight.has(host)) return probeInflight.get(host);
+
+  const probe = (async () => {
+    let unreachable = false;
+    try {
+      await fetch(url, { mode: 'no-cors', cache: 'no-store', signal });
+    } catch (e) {
+      if (isAbortError(e) || signal?.aborted) throw abortError();
+      unreachable = true;
+    }
+    probeCache.set(host, { unreachable, at: Date.now() });
+    return unreachable;
+  })();
+
+  probeInflight.set(host, probe);
+  try {
+    return await probe;
+  } finally {
+    probeInflight.delete(host);
+  }
+}
+
+export function subscribeServiceOutage(fn) {
+  serviceOutage.listeners.add(fn);
+  fn(outageSnapshot());
+  return () => serviceOutage.listeners.delete(fn);
+}
+
 export function dropQueuedDns() {
   dropQueued(isDnsLookupHost);
 }
@@ -232,17 +341,33 @@ async function fetchHonoringRateLimit(url, options, concurrency, log, signal) {
       throwIfAborted(signal);
       try {
         const res = await fetch(url, { ...options, signal });
+        if (isUnavailableStatus(res.status)) {
+          if (bumpOutageStreak(host) >= OUTAGE_STREAK) {
+            noteServiceOutage(host, outageKind(host), log);
+          }
+          gate.cooldown(DEFAULT_COOLDOWN_MS, log, host, res.status);
+          return { ok: false, res };
+        }
         if (isBackoffStatus(res.status)) {
           const hinted = parseRetryAfterMs(res);
           gate.cooldown(hinted != null ? hinted : DEFAULT_COOLDOWN_MS, log, host, res.status);
           return { ok: false, res };
         }
+        noteServiceRecovered(host);
         if (!isDnsLookupHost(host) && (res.status === 200 || res.status === 404)) {
           noteRdapRecovered(host);
         }
         return { ok: true, res };
       } catch (e) {
         if (isAbortError(e) || signal?.aborted) throw abortError();
+        const unreachable = await hostLooksUnreachable(url, signal);
+        if (unreachable) {
+          if (bumpOutageStreak(host) >= OUTAGE_STREAK) {
+            noteServiceOutage(host, outageKind(host), log);
+          }
+          gate.cooldown(DEFAULT_COOLDOWN_MS, log, host, 0);
+          return { ok: false, error: e };
+        }
         // RDAP 403/429 often omit CORS headers, so fetch() throws and JS
         // never sees the status. Treat that like a 403 with no Retry-After.
         const hidden = isDnsLookupHost(host) ? 0 : 403;

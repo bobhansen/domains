@@ -11,6 +11,7 @@ import SignalDebug from './components/SignalDebug.js';
 import ResultsGrid from './components/ResultsGrid.js';
 import StageTld from './components/StageTld.js';
 import SnailPace from './components/SnailPace.js';
+import ServiceOutage from './components/ServiceOutage.js';
 import ResetDialog from './components/ResetDialog.js';
 
 function storedLanguageSnapshot() {
@@ -218,7 +219,10 @@ export default function App() {
           </button>
         </div>
       </div>
-      <${SnailPace} compact=${compact} />
+      <div className=${`status-glyphs${compact ? ' is-compact' : ''}`}>
+        <${ServiceOutage} />
+        <${SnailPace} />
+      </div>
       <${ResetDialog}
         open=${resetOpen}
         onClose=${() => setResetOpen(false)}
