@@ -9,7 +9,7 @@ const URL_KEYS = ['lang', 'tld', 'min', 'max', 'mix'];
 
 export const DEFAULT_SETTINGS = {
   language: DEFAULT_LANGUAGE,
-  tldChoice: 'org',
+  tldChoice: 'com',
   customTld: '',
   minLen: LIMITS.length.minFallback,
   maxLen: LIMITS.length.maxFallback,
